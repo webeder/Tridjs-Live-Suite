@@ -35,6 +35,9 @@ public:
     void updateBpmDisplay (double bpm);
     void incrementPitch(float delta);
 
+    std::function<void(double, double)> onLoopSet; // start, duration
+    std::function<void(bool)> onLoopEnabled;
+
     // DragAndDrop overrides
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
     void filesDropped(const juce::StringArray& files, int x, int y) override;
@@ -53,18 +56,41 @@ private:
     public:
         WaveformDisplay (juce::AudioThumbnail& thumb);
         void paint (juce::Graphics& g) override;
+        void resized() override;
         void mouseDown (const juce::MouseEvent& e) override;
-
+        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+        
+        void generateRgbWaveform (const juce::File& file);
+        void setZoomIn();
+        void setZoomOut();
+        void setZoomLevel (double newZoom);
+        
+        void setLoopVisual (double start, double duration, bool active);
+        
         juce::String loadedTrackName;
         bool isDraggingOver = false;
         bool isPlaying = false;
         double trackLength = 0.0;
         double cuePoint = 0.0;
         double currentPos = 0.0;
+        double zoomFactor = 1.0; 
+        
+        bool loopActive = false;
+        double loopStart = 0.0;
+        double loopDuration = 0.0;
+
         std::function<void(double)> onSeekToPosition;
 
     private:
+        struct SpectralPoint { float low, mid, high; };
+        std::vector<SpectralPoint> spectralData;
+        
         juce::AudioThumbnail& thumbnail;
+        juce::Image waveformImage;
+        juce::AudioFormatManager formatManager;
+        
+        juce::TextButton zoomInBtn { "+" };
+        juce::TextButton zoomOutBtn { "-" };
     };
     WaveformDisplay waveformDisplay;
 
@@ -83,6 +109,11 @@ private:
     juce::TextButton playBtn { "PLAY" };
     juce::TextButton stopBtn { "STOP" };
     juce::TextButton cueBtn  { "CUE" };
+
+    // Loop
+    juce::TextButton loopBtn { "LOOP" };
+    juce::ComboBox loopSizeCombo;
+    double currentBpm = 120.0;
 
     // Knobs
     juce::Slider masterKnob;

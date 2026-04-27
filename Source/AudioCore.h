@@ -26,6 +26,9 @@ public:
     void stopMainTrack();
     void seekMainTrack (double positionSeconds);
     void ejectMainTrack();
+    void setMainTrackLoopRange (double startTime, double duration);
+    void setMainTrackLoopEnabled (bool enabled);
+    bool isMainTrackLoopEnabled() const;
     double getMainTrackBpm() const { return mainTrackBpm * (1.0 + (pitchValue * 0.08)); }
     double getMainTrackPosition() const;
     double getMainTrackLength() const;
@@ -134,11 +137,14 @@ private:
         juce::int64 getTotalLength() const override;
         bool isLooping() const override;
         void setLooping(bool shouldLoop) override;
+        void setLoopRange(juce::int64 start, juce::int64 length);
 
     private:
         std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
         double currentSampleRate = 44100.0;
         bool looping = false;
+        juce::int64 loopStart = 0;
+        juce::int64 loopLength = 0;
         int crossfadeSamples = 220; // 5ms in samples
     };
 

@@ -215,6 +215,8 @@ MainComponent::MainComponent()
   header.onPitchChanged = [this](float p) { audioEngine.setGlobalPitchRatio((double)p); };
   header.onFileDropped = [this](const juce::File& file) { audioEngine.loadMainTrack(file); };
   header.onEject = [this] { audioEngine.ejectMainTrack(); };
+  header.onLoopSet = [this](double start, double duration) { audioEngine.setMainTrackLoopRange(start, duration); };
+  header.onLoopEnabled = [this](bool enabled) { audioEngine.setMainTrackLoopEnabled(enabled); };
 
   stems.onStemMuteChanged = [this](int idx, bool muted) { audioEngine.setStemMuted(idx, muted); };
   fxRack.onMidiDeviceIndexChanged = [this](int idx) {

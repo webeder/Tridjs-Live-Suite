@@ -312,19 +312,26 @@ juce::int64 AudioCore::CrossfadingLoopSource::getNextReadPosition() const { retu
 juce::int64 AudioCore::CrossfadingLoopSource::getTotalLength() const { return readerSource->getTotalLength(); }
 bool AudioCore::CrossfadingLoopSource::isLooping() const { return looping; }
 void AudioCore::CrossfadingLoopSource::setLooping(bool shouldLoop) { looping = shouldLoop; }
+void AudioCore::CrossfadingLoopSource::setLoopRange(juce::int64 start, juce::int64 length) { 
+    loopStart = start; 
+    loopLength = length; 
+}
 
 void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill)
 {
     bufferToFill.clearActiveBufferRegion();
+    auto totalLen = readerSource->getTotalLength();
+    if (totalLen == 0) return;
 
-    if (readerSource->getTotalLength() == 0)
-        return;
+    // Se não estiver em modo loop de range, usa o comportamento padrão
+    juce::int64 start = (looping && loopLength > 0) ? loopStart : 0;
+    juce::int64 end = (looping && loopLength > 0) ? (loopStart + loopLength) : totalLen;
+    end = juce::jmin(end, totalLen);
 
-    auto len = readerSource->getTotalLength();
-    if (!looping || len <= crossfadeSamples * 2) {
+    if (!looping || (end - start) <= crossfadeSamples * 2) {
         readerSource->getNextAudioBlock(bufferToFill);
-        if (looping && readerSource->getNextReadPosition() >= len)
-            readerSource->setNextReadPosition(0);
+        if (looping && readerSource->getNextReadPosition() >= end)
+            readerSource->setNextReadPosition(start);
         return;
     }
 
@@ -335,54 +342,46 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
     {
         auto pos = readerSource->getNextReadPosition();
         
-        if (pos >= len - crossfadeSamples)
+        if (pos >= end - crossfadeSamples)
         {
-            int samplesToProcess = juce::jmin(samplesLeft, (int)(len - pos));
-            
+            int samplesToProcess = juce::jmin(samplesLeft, (int)(end - pos));
+            if (samplesToProcess <= 0) { readerSource->setNextReadPosition(start); continue; }
+
             juce::AudioBuffer<float> tailBuffer(bufferToFill.buffer->getNumChannels(), samplesToProcess);
             tailBuffer.clear();
             juce::AudioSourceChannelInfo tailInfo(&tailBuffer, 0, samplesToProcess);
-            
-            auto tailPos = readerSource->getNextReadPosition();
             readerSource->getNextAudioBlock(tailInfo);
             
             juce::AudioBuffer<float> headBuffer(bufferToFill.buffer->getNumChannels(), samplesToProcess);
             headBuffer.clear();
             juce::AudioSourceChannelInfo headInfo(&headBuffer, 0, samplesToProcess);
             
-            juce::int64 headPos = pos - (len - crossfadeSamples);
-            readerSource->setNextReadPosition(headPos);
+            juce::int64 offset = pos - (end - crossfadeSamples);
+            readerSource->setNextReadPosition(start + offset);
             readerSource->getNextAudioBlock(headInfo);
             
-            readerSource->setNextReadPosition(tailPos + samplesToProcess);
+            readerSource->setNextReadPosition(start + offset + samplesToProcess);
 
             for (int chan = 0; chan < bufferToFill.buffer->getNumChannels(); ++chan)
             {
                 auto* dst = bufferToFill.buffer->getWritePointer(chan, dstStart);
                 auto* tailSrc = tailBuffer.getReadPointer(chan);
                 auto* headSrc = headBuffer.getReadPointer(chan);
-                
-                for (int i = 0; i < samplesToProcess; ++i)
-                {
-                    float factor = (float)(headPos + i) / (float)crossfadeSamples; // 0.0 to 1.0 limit
-                    if (factor > 1.0f) factor = 1.0f;
+                for (int i = 0; i < samplesToProcess; ++i) {
+                    float factor = (float)i / (float)samplesToProcess; 
                     dst[i] = tailSrc[i] * (1.0f - factor) + headSrc[i] * factor;
                 }
             }
-
             dstStart += samplesToProcess;
             samplesLeft -= samplesToProcess;
-
-            if (readerSource->getNextReadPosition() >= len)
-                readerSource->setNextReadPosition(crossfadeSamples);
         }
         else
         {
-            int samplesToProcess = juce::jmin(samplesLeft, (int)((len - crossfadeSamples) - pos));
-            
+            int samplesToProcess = juce::jmin(samplesLeft, (int)((end - crossfadeSamples) - pos));
+            if (samplesToProcess <= 0) { readerSource->setNextReadPosition(end - crossfadeSamples); continue; }
+
             juce::AudioSourceChannelInfo normalInfo(bufferToFill.buffer, dstStart, samplesToProcess);
             readerSource->getNextAudioBlock(normalInfo);
-            
             dstStart += samplesToProcess;
             samplesLeft -= samplesToProcess;
         }
@@ -454,6 +453,22 @@ void AudioCore::ejectMainTrack()
     reverbState[0] = 0.0f;
     reverbState[1] = 0.0f;
     for(int s=0; s<NUM_STEMS; ++s) stemMuted[s] = false;
+}
+
+void AudioCore::setMainTrackLoopRange(double startTime, double duration) {
+    if (mainTrackChannel && mainTrackChannel->readerSource)
+        mainTrackChannel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
+}
+
+void AudioCore::setMainTrackLoopEnabled(bool enabled) {
+    if (mainTrackChannel && mainTrackChannel->readerSource)
+        mainTrackChannel->readerSource->setLooping(enabled);
+}
+
+bool AudioCore::isMainTrackLoopEnabled() const {
+    if (mainTrackChannel && mainTrackChannel->readerSource)
+        return mainTrackChannel->readerSource->isLooping();
+    return false;
 }
 
 void AudioCore::setFxEnabled(int fxIndex, bool enabled)
