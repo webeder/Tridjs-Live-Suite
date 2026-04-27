@@ -6,6 +6,7 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
     // Setup Tabs
     addAndMakeVisible(tabs);
     tabs.addTab("FX", juce::Colours::transparentBlack, &effectsContent, false);
+    tabs.addTab("FX TOUCH", juce::Colours::transparentBlack, &touchTabContent, false);
     tabs.addTab("RGB", juce::Colours::transparentBlack, &rgbContent, false);
     tabs.addTab("LEARN", juce::Colours::transparentBlack, &midiLearnContent, false);
     tabs.addTab("SERIAL", juce::Colours::transparentBlack, &serialContent, false);

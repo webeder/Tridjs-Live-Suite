@@ -200,6 +200,30 @@ MainComponent::MainComponent()
   };
   fxRack.onFxAmountChanged = [this](int idx, float amt) { audioEngine.setFxAmount(idx, amt); };
 
+  // Wire XY Pad & FX TOUCH Suite (Lógica de Mola + Modos)
+  fxRack.touchTabContent.touchPad.onXyChanged = [this](float x, float y) {
+      audioEngine.setXyFilter(x, y);
+  };
+  fxRack.touchTabContent.touchPad.onActiveChanged = [this](bool active) {
+      audioEngine.setXyFilterEnabled(active);
+  };
+  fxRack.touchTabContent.touchPad.onSerialRgbRequested = [this](int r, int g, int b) {
+      inputManager.getSerialManager().sendString(juce::String(r) + "," + juce::String(g) + "," + juce::String(b) + "\n");
+  };
+
+  fxRack.touchTabContent.modeBtn.onClick = [this] {
+      bool isUltra = fxRack.touchTabContent.modeBtn.getButtonText() == "ULTRA MULTI-FX";
+      if (isUltra) {
+          fxRack.touchTabContent.modeBtn.setButtonText("LADDER FILTER");
+          fxRack.touchTabContent.touchPad.setMode(FX_Rack_Alpha::Ladder);
+          audioEngine.setXyMode(AudioCore::XyMode::Ladder);
+      } else {
+          fxRack.touchTabContent.modeBtn.setButtonText("ULTRA MULTI-FX");
+          fxRack.touchTabContent.touchPad.setMode(FX_Rack_Alpha::UltraMulti);
+          audioEngine.setXyMode(AudioCore::XyMode::UltraMulti);
+      }
+  };
+
   // Setup Palette UI
   juce::StringArray paletteNames;
   for (const auto& e : rgbManager.getLightingEffects()) paletteNames.add(e.displayName);

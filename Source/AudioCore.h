@@ -60,6 +60,11 @@ public:
     // Volume Controls (0.0 to 1.0)
     void setMasterVolume (float vol);
     void setTrackVolume (float vol);
+    enum class XyMode { Ladder, UltraMulti };
+    void setXyMode (XyMode mode);
+    void setXyFilter (float x, float y);
+    void setXyFilterEnabled (bool enabled);
+    
     float getMasterVolume() const { return masterVolume; }
     float getTrackVolume() const { return trackVolume; }
     
@@ -113,6 +118,20 @@ private:
     float reverbState[2] = { 0.0f, 0.0f };
     float lfoPhase = 0.0f;
     double currentSampleRate = 44100.0;
+
+    // XY Pad FX (Mola Logic)
+    XyMode xyMode = XyMode::UltraMulti;
+    juce::dsp::LadderFilter<float> xyLpFilter;
+    juce::dsp::LadderFilter<float> xyHpFilter;
+    juce::dsp::Chorus<float> xyFlanger;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> xyEcho;
+    
+    float xyFlangerMix = 0.0f;
+    float xyEchoMix = 0.0f;
+    float xyLpMix = 0.0f;
+    float xyHpMix = 0.0f;
+    
+    std::atomic<bool> xyEnabled { false };
 
     // Stems State (3 bands: 0=vocal, 1=drums, 2=bass)
     static constexpr int NUM_STEMS = 3;

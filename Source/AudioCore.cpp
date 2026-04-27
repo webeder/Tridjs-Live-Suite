@@ -60,6 +60,25 @@ void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
     // Configura o smoothing para os ganhos dos stems (100ms de rampa)
     for (int i = 0; i < NUM_STEMS; ++i)
         stemGains[i].reset(sampleRate, 0.1);
+
+    // XY Filter Setup
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = samplesPerBlockExpected;
+    spec.numChannels = 2;
+    xyLpFilter.prepare(spec);
+    xyLpFilter.setMode(juce::dsp::LadderFilterMode::LPF24);
+    xyHpFilter.prepare(spec);
+    xyHpFilter.setMode(juce::dsp::LadderFilterMode::HPF24);
+
+    xyFlanger.prepare(spec);
+    xyFlanger.setCentreDelay(7.0f);
+    xyFlanger.setFeedback(0.4f);
+    xyFlanger.setDepth(0.5f);
+    
+    xyEcho.prepare(spec);
+    xyEcho.setMaximumDelayInSamples((int)(sampleRate * 2.0));
+    xyEcho.setDelay((float)(sampleRate * 0.4)); // 400ms fixo
 }
 
 void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
@@ -213,7 +232,41 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
         float mag = mainBuffer->getMagnitude(ch, start, num);
         if (mag > peak) peak = mag;
     }
-    currentPeakLevel.store(peak);
+    // 6. XY Filter (Mola Suite)
+    if (xyEnabled.load())
+    {
+        juce::dsp::AudioBlock<float> block(*mainBuffer);
+        juce::dsp::ProcessContextReplacing<float> context(block);
+
+        if (xyMode == XyMode::Ladder)
+        {
+            xyLpFilter.process(context);
+        }
+        else
+        {
+            // X-Axis: Flanger (Left) ou Echo (Right)
+            if (xyFlangerMix > 0.01f) {
+                xyFlanger.setMix(xyFlangerMix * 0.7f);
+                xyFlanger.process(context);
+            } else if (xyEchoMix > 0.01f) {
+                for (int ch = 0; ch < mainBuffer->getNumChannels(); ++ch) {
+                    auto* samples = mainBuffer->getWritePointer(ch, start);
+                    for (int i = 0; i < num; ++i) {
+                        float delayed = xyEcho.popSample(ch);
+                        xyEcho.pushSample(ch, samples[i] + delayed * 0.5f);
+                        samples[i] += delayed * xyEchoMix * 0.6f;
+                    }
+                }
+            }
+
+            // Y-Axis: HPF (Up) ou LPF (Down)
+            if (xyLpMix > 0.01f) {
+                xyLpFilter.process(context);
+            } else if (xyHpMix > 0.01f) {
+                xyHpFilter.process(context);
+            }
+        }
+    }
 }
 
 void AudioCore::asyncExtractStems(const juce::File& file)
@@ -488,6 +541,67 @@ bool AudioCore::isFxEnabled(int fxIndex) const
     if (fxIndex >= 0 && fxIndex < NUM_FX)
         return fxProcessors[fxIndex].enabled;
     return false;
+}
+
+void AudioCore::setXyMode(XyMode mode)
+{
+    xyMode = mode;
+    // Reset Total
+    xyFlangerMix = 0.0f;
+    xyEchoMix = 0.0f;
+    xyLpMix = 0.0f;
+    xyHpMix = 0.0f;
+    xyLpFilter.setResonance(0.0f);
+    xyLpFilter.setCutoffFrequencyHz(20000.0f);
+}
+
+void AudioCore::setXyFilter(float x, float y)
+{
+    if (xyMode == XyMode::Ladder)
+    {
+        // X -> Cutoff (20Hz a 18kHz)
+        float cutoff = 20.0f * std::pow(900.0f, x);
+        xyLpFilter.setCutoffFrequencyHz(cutoff);
+        // Y -> Resonance (0.0 a 0.85)
+        xyLpFilter.setResonance(y * 0.85f);
+        xyLpMix = 1.0f;
+    }
+    else
+    {
+        // X -> Flanger (Left) ou Echo (Right)
+        if (x < 0.48f) {
+            xyFlangerMix = (0.5f - x) * 2.0f;
+            xyEchoMix = 0.0f;
+        } else if (x > 0.52f) {
+            xyEchoMix = (x - 0.5f) * 2.0f;
+            xyFlangerMix = 0.0f;
+        } else {
+            xyFlangerMix = 0.0f;
+            xyEchoMix = 0.0f;
+        }
+
+        // Y -> LPF (Down) ou HPF (Up)
+        if (y < 0.48f) {
+            xyLpMix = (0.5f - y) * 2.0f;
+            xyHpMix = 0.0f;
+            float cutoff = 20000.0f * std::pow(0.015f, xyLpMix); 
+            xyLpFilter.setCutoffFrequencyHz(cutoff);
+            xyLpFilter.setResonance(0.0f);
+        } else if (y > 0.52f) {
+            xyHpMix = (y - 0.5f) * 2.0f;
+            xyLpMix = 0.0f;
+            float cutoff = 20.0f * std::pow(200.0f, xyHpMix); 
+            xyHpFilter.setCutoffFrequencyHz(cutoff);
+        } else {
+            xyLpMix = 0.0f;
+            xyHpMix = 0.0f;
+        }
+    }
+}
+
+void AudioCore::setXyFilterEnabled(bool enabled)
+{
+    xyEnabled.store(enabled);
 }
 
 void AudioCore::setGlobalPitchRatio(double val)

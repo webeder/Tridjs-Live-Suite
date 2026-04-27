@@ -130,6 +130,7 @@ target_link_libraries(TridjsLiveSuite
         juce::juce_gui_basics
         juce::juce_events
         juce::juce_data_structures
+        juce::juce_dsp
         
         # Link Custom Libs
         "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
