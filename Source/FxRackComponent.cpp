@@ -160,8 +160,10 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
 void FxRackComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour ((juce::uint32)0xff1a1a1a));
-    g.setColour (juce::Colours::cyan.withAlpha (0.5f));
-    g.drawRect (getLocalBounds(), 2);
+    
+    // Divisória sutil na margem esquerda (lado dos pads)
+    g.setColour (juce::Colour(0xff333333));
+    g.drawLine(0.0f, 0.0f, 0.0f, (float)getHeight(), 1.5f);
 }
 
 void FxRackComponent::resized()
@@ -295,7 +297,8 @@ void FxRackComponent::setInputMode(int mode) {
 
 void FxRackComponent::setSerialPort(const juce::String& port) {
     for (int i = 0; i < serialPortCombo.getNumItems(); ++i) {
-        if (serialPortCombo.getItemText(i) == port) {
+        juce::String itemText = serialPortCombo.getItemText(i);
+        if (itemText == port || itemText.startsWith(port + " - ")) {
             serialPortCombo.setSelectedItemIndex(i, juce::dontSendNotification);
             return;
         }

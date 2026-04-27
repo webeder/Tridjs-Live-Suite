@@ -133,6 +133,7 @@ target_link_libraries(TridjsLiveSuite
         
         # Link Custom Libs
         "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
+        setupapi
 )
 
 # Copiar DLL do ONNX para o diretório do executável após a build

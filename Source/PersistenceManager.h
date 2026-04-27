@@ -18,36 +18,33 @@ public:
         appDir.getChildFile("data").createDirectory();
     }
 
-    void saveSettings(float masterVol, float trackVol, int inputMode = 0, const juce::String& serialPort = "", int baud = 115200)
+    void saveSettings(float masterVol, float trackVol, int inputMode = 0, const juce::String& serialPort = "", int baud = 115200, bool someOption = false)
     {
-        juce::XmlElement xml("SETTINGS");
-        xml.setAttribute("masterVolume", (double)masterVol);
-        xml.setAttribute("trackVolume", (double)trackVol);
-        xml.setAttribute("inputMode", inputMode);
-        xml.setAttribute("serialPort", serialPort);
-        xml.setAttribute("serialBaud", baud);
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        
+        auto* settings = xml.createNewChildElement("SETTINGS");
+        settings->setAttribute("masterVolume", (double)masterVol);
+        settings->setAttribute("trackVolume", (double)trackVol);
+        settings->setAttribute("inputMode", inputMode);
+        settings->setAttribute("serialPort", serialPort);
+        settings->setAttribute("serialBaud", baud);
+        settings->setAttribute("someOption", someOption);
         
         auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
                         .getParentDirectory().getChildFile("settings.xml");
         xml.writeTo(file);
     }
 
-    void saveConfig(bool someOption)
-    {
-        juce::XmlElement xml("CONFIG");
-        xml.setAttribute("someOption", someOption);
-        
-        auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
-                        .getParentDirectory().getChildFile("config_options.xml");
-        xml.writeTo(file);
-    }
 
     void saveDatabase(const juce::StringArray& trackPaths)
     {
-        juce::XmlElement xml("DATABASE");
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        auto* db = xml.createNewChildElement("DATABASE");
         for (auto& path : trackPaths)
         {
-            auto* track = xml.createNewChildElement("TRACK");
+            auto* track = db->createNewChildElement("TRACK");
             track->setAttribute("path", path);
         }
         
@@ -58,14 +55,16 @@ public:
 
     void saveMidiMapping(const juce::String& fileName, const juce::String& deviceName, const std::map<int, juce::String>& mappings)
     {
-        juce::XmlElement xml("MIDI_MAP");
-        xml.setAttribute("device", deviceName);
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        auto* mapNode = xml.createNewChildElement("MIDI_MAP");
+        mapNode->setAttribute("device", deviceName);
         
         for (auto const& [rowIdx, identifier] : mappings)
         {
-            auto* node = xml.createNewChildElement("MAPPING");
+            auto* node = mapNode->createNewChildElement("MAPPING");
             node->setAttribute("row", rowIdx);
-            node->setAttribute("id", identifier); // e.g. "CC 10" or "Note 36"
+            node->setAttribute("id", identifier);
         }
         
         auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
@@ -85,9 +84,11 @@ public:
         auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
                         .getParentDirectory().getChildFile("rgb_settings.xml");
         
-        juce::XmlElement xml("RGB_SETTINGS");
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        auto* rgbNode = xml.createNewChildElement("RGB_SETTINGS");
         
-        auto* presetsNode = xml.createNewChildElement("PRESETS");
+        auto* presetsNode = rgbNode->createNewChildElement("PRESETS");
         for (const auto& p : presets)
         {
             auto* node = presetsNode->createNewChildElement("PRESET");
@@ -97,7 +98,7 @@ public:
             node->setAttribute("command", p.command);
         }
 
-        auto* padsNode = xml.createNewChildElement("PAD_MAPPINGS");
+        auto* padsNode = rgbNode->createNewChildElement("PAD_MAPPINGS");
         for (auto const& [idx, m] : padMappings)
         {
             auto* node = padsNode->createNewChildElement("PAD");
@@ -108,7 +109,7 @@ public:
             node->setAttribute("command", m.directCommand);
         }
 
-        auto* fxNode = xml.createNewChildElement("FX_MAPPINGS");
+        auto* fxNode = rgbNode->createNewChildElement("FX_MAPPINGS");
         for (auto const& [idx, m] : fxMappings)
         {
             auto* node = fxNode->createNewChildElement("FX");
@@ -160,9 +161,11 @@ public:
 
     void savePadAssignments(const juce::StringArray& padPaths)
     {
-        juce::XmlElement xml("PAD_ASSIGNMENTS");
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        auto* pads = xml.createNewChildElement("PAD_ASSIGNMENTS");
         for (int i = 0; i < padPaths.size(); ++i) {
-            auto* p = xml.createNewChildElement("PAD");
+            auto* p = pads->createNewChildElement("PAD");
             p->setAttribute("idx", i);
             p->setAttribute("file", padPaths[i]);
         }

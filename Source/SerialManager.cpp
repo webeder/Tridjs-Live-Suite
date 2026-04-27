@@ -1,5 +1,8 @@
 #include "SerialManager.h"
 #include <cstring>
+#include <SetupAPI.h>
+#include <devguid.h>
+#include <regstr.h>
 
 SerialManager::SerialManager() : Thread("SerialReaderThread")
 {
@@ -13,27 +16,88 @@ SerialManager::~SerialManager()
 juce::StringArray SerialManager::listAvailablePorts()
 {
     juce::StringArray ports;
-    char buffer[65535];
-    if (QueryDosDeviceA(NULL, buffer, sizeof(buffer)))
+    
+    HDEVINFO hDevInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_COMPORT, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hDevInfo != INVALID_HANDLE_VALUE)
     {
-        char* p = buffer;
-        while (*p)
+        SP_DEVINFO_DATA devInfoData;
+        devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+        
+        for (DWORD i = 0; SetupDiEnumDeviceInfo(hDevInfo, i, &devInfoData); ++i)
         {
-            juce::String name(p);
-            if (name.startsWithIgnoreCase("COM"))
+            char friendlyName[256] = { 0 };
+            char hardwareId[512] = { 0 };
+            char portName[64] = { 0 };
+            
+            // 1. Obter Friendly Name (geralmente contém COMx e a Descrição)
+            if (SetupDiGetDeviceRegistryPropertyA(hDevInfo, &devInfoData, SPDRP_FRIENDLYNAME, NULL, (PBYTE)friendlyName, sizeof(friendlyName), NULL))
             {
-                ports.add(name);
+                juce::String fName(friendlyName);
+                juce::String comPort;
+                
+                // Extrair COMx do FriendlyName ex: "USB Serial Port (COM4)"
+                int openParen = fName.lastIndexOf("(");
+                int closeParen = fName.lastIndexOf(")");
+                if (openParen != -1 && closeParen != -1 && closeParen > openParen)
+                {
+                    comPort = fName.substring(openParen + 1, closeParen).trim();
+                }
+                
+                if (comPort.startsWithIgnoreCase("COM"))
+                {
+                    juce::String description = fName.upToFirstOccurrenceOf(" (", false, false).trim();
+                    juce::String vidPidInfo;
+                    
+                    // 2. Obter Hardware ID para extrair VID/PID
+                    if (SetupDiGetDeviceRegistryPropertyA(hDevInfo, &devInfoData, SPDRP_HARDWAREID, NULL, (PBYTE)hardwareId, sizeof(hardwareId), NULL))
+                    {
+                        juce::String hwId(hardwareId);
+                        int vidPos = hwId.indexOfIgnoreCase("VID_");
+                        int pidPos = hwId.indexOfIgnoreCase("PID_");
+                        
+                        if (vidPos != -1 && pidPos != -1)
+                        {
+                            juce::String vid = hwId.substring(vidPos + 4, vidPos + 8).toUpperCase();
+                            juce::String pid = hwId.substring(pidPos + 4, pidPos + 8).toUpperCase();
+                            vidPidInfo = " (VID:" + vid + " PID:" + pid + ")";
+                        }
+                    }
+                    
+                    ports.add(comPort + " - " + description + vidPidInfo);
+                }
             }
-            p += strlen(p) + 1;
+        }
+        SetupDiDestroyDeviceInfoList(hDevInfo);
+    }
+
+    // Fallback se o SetupAPI falhar por algum motivo
+    if (ports.isEmpty())
+    {
+        char buffer[65535];
+        if (QueryDosDeviceA(NULL, buffer, sizeof(buffer)))
+        {
+            char* p = buffer;
+            while (*p)
+            {
+                juce::String name(p);
+                if (name.startsWithIgnoreCase("COM")) ports.add(name);
+                p += strlen(p) + 1;
+            }
         }
     }
+    
     ports.sort(true);
     return ports;
 }
 
-bool SerialManager::open(const juce::String& portName, int baudRate)
+bool SerialManager::open(const juce::String& fullPortString, int baudRate)
 {
     close();
+
+    // Extrair apenas o nome da porta (ex: COM4) se vier o formato longo
+    juce::String portName = fullPortString;
+    if (fullPortString.contains(" - "))
+        portName = fullPortString.upToFirstOccurrenceOf(" - ", false, false).trim();
 
     currentPort = portName;
     currentBaud = baudRate;

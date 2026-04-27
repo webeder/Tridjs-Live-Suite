@@ -262,33 +262,37 @@ void MainComponent::loadAllSettings() {
 
     // 2. Volumes and General
     if (auto* xml = persistence.loadSettings()) {
-        float mv = (float)xml->getDoubleAttribute("masterVolume", 1.0);
-        float tv = (float)xml->getDoubleAttribute("trackVolume", 1.0);
-        audioEngine.setMasterVolume(mv);
-        audioEngine.setTrackVolume(tv);
-        header.updateMasterVolumeFromExtern(mv);
-        header.updateTrackVolumeFromExtern(tv);
-        
-        int mode = xml->getIntAttribute("inputMode", 0);
-        inputManager.setInputMode(static_cast<InputManager::InputMode>(mode));
-        fxRack.setInputMode(mode);
-        
-        juce::String port = xml->getStringAttribute("serialPort");
-        if (port.isNotEmpty()) {
-            inputManager.openSerialPort(port);
-            fxRack.setSerialPort(port);
+        if (auto* settingsNode = xml->getChildByName("SETTINGS")) {
+            float mv = (float)settingsNode->getDoubleAttribute("masterVolume", 1.0);
+            float tv = (float)settingsNode->getDoubleAttribute("trackVolume", 1.0);
+            audioEngine.setMasterVolume(mv);
+            audioEngine.setTrackVolume(tv);
+            header.updateMasterVolumeFromExtern(mv);
+            header.updateTrackVolumeFromExtern(tv);
+            
+            int mode = settingsNode->getIntAttribute("inputMode", 0);
+            inputManager.setInputMode(static_cast<InputManager::InputMode>(mode));
+            fxRack.setInputMode(mode);
+            
+            juce::String port = settingsNode->getStringAttribute("serialPort");
+            if (port.isNotEmpty()) {
+                inputManager.openSerialPort(port);
+                fxRack.setSerialPort(port);
+            }
         }
         delete xml;
     }
 
     // 3. Pads Assignments
     if (auto* xml = persistence.loadPadAssignments()) {
-        for (auto* node = xml->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
-            int idx = node->getIntAttribute("idx");
-            juce::String file = node->getStringAttribute("file");
-            if (file.isNotEmpty()) {
-                audioEngine.loadAudioFile(juce::File(file), idx);
-                gridPads.getPads()[idx]->setLoadedFile(juce::File(file));
+        if (auto* padsNode = xml->getChildByName("PAD_ASSIGNMENTS")) {
+            for (auto* node = padsNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
+                int idx = node->getIntAttribute("idx");
+                juce::String file = node->getStringAttribute("file");
+                if (file.isNotEmpty()) {
+                    audioEngine.loadAudioFile(juce::File(file), idx);
+                    gridPads.getPads()[idx]->setLoadedFile(juce::File(file));
+                }
             }
         }
         delete xml;
@@ -303,26 +307,28 @@ void MainComponent::loadAllSettings() {
 
     // 5. RGB Settings
     if (auto* xml = persistence.loadRgbSettings()) {
-        if (auto* padsNode = xml->getChildByName("PAD_MAPPINGS")) {
-            for (auto* node = padsNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
-                int idx = node->getIntAttribute("index");
-                RgbMapping m;
-                m.type = static_cast<RgbMapping::Type>(node->getIntAttribute("type"));
-                m.presetName = node->getStringAttribute("preset");
-                m.fixedColor = juce::Colour::fromString(node->getStringAttribute("color"));
-                rgbManager.setPadMapping(idx, m);
-                gridPads.getPads()[idx]->setRgbInfo(m.presetName, m.type == RgbMapping::FixedColor ? m.fixedColor : juce::Colours::white);
+        if (auto* rgbRoot = xml->getChildByName("RGB_SETTINGS")) {
+            if (auto* padsNode = rgbRoot->getChildByName("PAD_MAPPINGS")) {
+                for (auto* node = padsNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
+                    int idx = node->getIntAttribute("index");
+                    RgbMapping m;
+                    m.type = static_cast<RgbMapping::Type>(node->getIntAttribute("type"));
+                    m.presetName = node->getStringAttribute("preset");
+                    m.fixedColor = juce::Colour::fromString(node->getStringAttribute("color"));
+                    rgbManager.setPadMapping(idx, m);
+                    gridPads.getPads()[idx]->setRgbInfo(m.presetName, m.type == RgbMapping::FixedColor ? m.fixedColor : juce::Colours::white);
+                }
             }
-        }
-        if (auto* fxNode = xml->getChildByName("FX_MAPPINGS")) {
-            for (auto* node = fxNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
-                int idx = node->getIntAttribute("index");
-                RgbMapping m;
-                m.type = static_cast<RgbMapping::Type>(node->getIntAttribute("type"));
-                m.presetName = node->getStringAttribute("preset");
-                m.fixedColor = juce::Colour::fromString(node->getStringAttribute("color"));
-                rgbManager.setFxMapping(idx, m);
-                fxRack.fxSlots[idx]->setRgbInfo(m.presetName, m.type == RgbMapping::FixedColor ? m.fixedColor : juce::Colours::white);
+            if (auto* fxNode = rgbRoot->getChildByName("FX_MAPPINGS")) {
+                for (auto* node = fxNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
+                    int idx = node->getIntAttribute("index");
+                    RgbMapping m;
+                    m.type = static_cast<RgbMapping::Type>(node->getIntAttribute("type"));
+                    m.presetName = node->getStringAttribute("preset");
+                    m.fixedColor = juce::Colour::fromString(node->getStringAttribute("color"));
+                    rgbManager.setFxMapping(idx, m);
+                    fxRack.fxSlots[idx]->setRgbInfo(m.presetName, m.type == RgbMapping::FixedColor ? m.fixedColor : juce::Colours::white);
+                }
             }
         }
         delete xml;
@@ -358,14 +364,17 @@ void MainComponent::applyMidiAction(int rowIdx, float value) {
     }
 }
 
-void MainComponent::loadMidiMappingFromFile (const juce::File& file) {
+void MainComponent::loadMidiMappingFromFile (const juce::File& file)
+{
     if (auto* xml = persistence.loadMidiMapping(file)) {
-        midiMappings.clear();
-        for (auto* node = xml->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
-            int row = node->getIntAttribute("row");
-            juce::String id = node->getStringAttribute("id");
-            midiMappings[row] = id;
-            fxRack.updateMappingDisplay(row, id);
+        if (auto* mapNode = xml->getChildByName("MIDI_MAP")) {
+            midiMappings.clear();
+            for (auto* node = mapNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
+                int row = node->getIntAttribute("row");
+                juce::String id = node->getStringAttribute("id");
+                midiMappings[row] = id;
+                fxRack.updateMappingDisplay(row, id);
+            }
         }
         delete xml;
     }

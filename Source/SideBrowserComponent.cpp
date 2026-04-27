@@ -10,7 +10,7 @@ SideBrowserComponent::SideBrowserComponent()
 
     addAndMakeVisible (toggleBtn);
     toggleBtn.addListener (this);
-    toggleBtn.setColour (juce::TextButton::buttonColourId, juce::Colour ((juce::uint32)0xff333333));
+    toggleBtn.setColour (juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
     toggleBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::lightgrey);
 
     addAndMakeVisible (fileTree);
@@ -53,8 +53,8 @@ void SideBrowserComponent::paint (juce::Graphics& g)
     g.fillAll (juce::Colour ((juce::uint32)0xff1a1a1a)); 
     
     // Divisória sutil na última margem para separar da engine de pads
-    g.setColour (juce::Colours::black.withAlpha(0.6f));
-    g.drawLine((float)getWidth(), 0.0f, (float)getWidth(), (float)getHeight(), 2.0f);
+    g.setColour (juce::Colour(0xff333333));
+    g.drawLine((float)getWidth(), 0.0f, (float)getWidth(), (float)getHeight(), 1.5f);
 }
 
 void SideBrowserComponent::resized()
