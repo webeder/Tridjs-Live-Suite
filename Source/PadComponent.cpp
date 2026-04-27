@@ -20,13 +20,24 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     loopBtn.onClick = [this] {
         isLoopActive = loopBtn.getToggleState();
         if (onLoopToggled) onLoopToggled(index, isLoopActive);
+        
+        // If we unmark loop while playing, stop immediately
+        if (!isLoopActive && isActive) {
+            isActive = false;
+            if (onPlayStateChanged) onPlayStateChanged(index, false);
+        }
         repaint();
     };
     addAndMakeVisible (loopBtn);
 
     ejectBtn.setImages(false, true, true, ejectIcon, 1.0f, {}, ejectIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), ejectIcon, 1.0f, juce::Colours::lightgrey.withAlpha(0.6f));
     ejectBtn.onClick = [this] {
-        loadedFilename = ""; isActive = false; isRecording = false;
+        loadedFilename = ""; 
+        currentFilePath = ""; // CLEAR PATH FOR PERSISTENCE
+        bool wasActive = isActive;
+        isActive = false; 
+        isRecording = false;
+        if (wasActive && onPlayStateChanged) onPlayStateChanged(index, false);
         if (onEjectRequested) onEjectRequested(index);
         repaint();
     };
@@ -36,71 +47,133 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     volumeSlider.setRange(0.0, 1.0, 0.01);
     volumeSlider.setValue(0.8);
     volumeSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    volumeSlider.setColour(juce::Slider::trackColourId, juce::Colours::cyan.withAlpha(0.3f));
-    volumeSlider.onValueChange = [this] { if (onVolumeChanged) onVolumeChanged(index, (float)volumeSlider.getValue()); };
+    volumeSlider.setAlpha(0.0f); // Make the slider invisible but functional
+    volumeSlider.onValueChange = [this] { 
+        if (onVolumeChanged) onVolumeChanged(index, (float)volumeSlider.getValue()); 
+        repaint();
+    };
     addAndMakeVisible(volumeSlider);
 }
 
 void PadComponent::paint (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat();
-    auto cornerSize = 12.0f;
-    juce::Colour baseColour = customBaseColor;
-    if (isDraggingOver) baseColour = baseColour.brighter(0.2f);
-    else if (isMouseDown) baseColour = baseColour.darker(0.2f);
+    auto cornerSize = 14.0f;
     
-    if (isRecording) {
-        float blink = (float)std::abs(std::sin(juce::Time::getMillisecondCounterHiRes() * 0.008));
-        baseColour = juce::Colour (0xffff0000).withAlpha(0.1f + 0.3f * blink);
-        g.setColour (juce::Colour (0xffff0000).withAlpha(0.4f * blink)); 
-        g.fillRoundedRectangle (area.expanded (2.0f + 2.0f * blink), cornerSize + 2.0f);
-    } 
-    else if (isActive) {
-        baseColour = juce::Colour (0xff00d1b2).withAlpha(0.6f);
-        g.setColour (baseColour.withAlpha(0.3f)); 
-        g.fillRoundedRectangle (area.expanded (3.0f), cornerSize + 3.0f);
+    // Choose theme color based on index
+    juce::Colour themeColor = colorCyan;
+    if (index % 4 == 1) themeColor = juce::Colours::white.withAlpha(0.6f);
+    else if (index % 4 == 2) themeColor = colorOrange;
+    else if (index % 4 == 3) themeColor = colorNeon;
+
+    // 1. Draw Outer Glow if Active or Recording
+    if (isActive || isRecording)
+    {
+        float glowSize = 4.0f;
+        if (isRecording) {
+            float blink = (float)std::abs(std::sin(juce::Time::getMillisecondCounterHiRes() * 0.008));
+            glowSize += 2.0f * blink;
+            themeColor = juce::Colours::red;
+        }
+
+        for (int i = 1; i <= 5; ++i) {
+            g.setColour(themeColor.withAlpha(0.1f / (float)i));
+            g.drawRoundedRectangle(area.expanded((float)i * 1.5f), cornerSize + (float)i, 2.0f);
+        }
     }
 
-    g.setColour (baseColour);
-    g.fillRoundedRectangle (area, cornerSize);
-    g.setColour (juce::Colours::grey.withAlpha(0.3f));
-    g.drawRoundedRectangle (area.reduced (1.0f), cornerSize, 1.5f);
+    // 2. Background Gradient
+    juce::ColourGradient grad(colorBgStart, area.getCentreX(), area.getY(),
+                              colorBgEnd, area.getCentreX(), area.getBottom(), false);
+    g.setGradientFill(grad);
+    g.fillRoundedRectangle(area, cornerSize);
 
+    // 3. Subtle Border
+    if (isActive) {
+        g.setColour(themeColor.withAlpha(0.8f));
+        g.drawRoundedRectangle(area.reduced(0.5f), cornerSize, 1.5f);
+    } else {
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.drawRoundedRectangle(area.reduced(0.5f), cornerSize, 1.0f);
+    }
+
+    // 4. Indicator Bar (Vertical gradient bar on the right)
+    auto indicatorArea = area.removeFromRight(12).reduced(4, 8);
+    float val = (float)volumeSlider.getValue();
+    
+    // Track background
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    g.fillRoundedRectangle(indicatorArea, 2.0f);
+
+    // Progress bar
+    auto progressArea = indicatorArea.withTrimmedTop(indicatorArea.getHeight() * (1.0f - val));
+    juce::ColourGradient barGrad(colorCyan, progressArea.getCentreX(), progressArea.getBottom(),
+                                 colorOrange, progressArea.getCentreX(), progressArea.getY(), false);
+    g.setGradientFill(barGrad);
+    g.fillRoundedRectangle(progressArea, 2.0f);
+
+    // 5. Main Text (Always show filename or Pad X)
+    juce::String textToDisplay = loadedFilename.isEmpty() ? "PAD " + juce::String(index + 1) : loadedFilename;
+    g.setColour(juce::Colours::white.withAlpha(isActive ? 1.0f : 0.7f));
+    g.setFont(juce::Font("Space Grotesk", 18.0f, juce::Font::bold).withExtraKerningFactor(0.1f));
+    g.drawText(textToDisplay.toUpperCase(), getLocalBounds().reduced(15, 20), juce::Justification::centred);
+
+    // 6. RGB Indicator (Bottom right inside pad, small square + label)
     if (currentRgbColor != juce::Colours::transparentBlack) {
-        auto rgbArea = area.removeFromTop(16).removeFromLeft(60).translated(4, 4);
-        g.setColour(currentRgbColor.withAlpha(0.7f));
-        g.fillRoundedRectangle(rgbArea, 3.0f);
-        g.setColour(juce::Colours::white);
-        g.setFont(juce::Font(10.0f, juce::Font::bold));
-        g.drawText(rgbLabel, rgbArea, juce::Justification::centred);
+        auto b = getLocalBounds().reduced(12, 12);
+        auto rgbArea = b.removeFromBottom(25).removeFromRight(120);
+        
+        // Small square
+        g.setColour(currentRgbColor);
+        g.fillRoundedRectangle(rgbArea.removeFromRight(10).withSizeKeepingCentre(10, 10).toFloat(), 2.0f);
+        
+        // Label
+        if (rgbLabel.isNotEmpty()) {
+            g.setColour(juce::Colours::white.withAlpha(0.6f));
+            g.setFont(juce::Font(10.0f, juce::Font::bold));
+            g.drawText(rgbLabel.toUpperCase(), rgbArea.removeFromLeft(rgbArea.getWidth() - 15), juce::Justification::centredRight);
+        }
     }
 
-    if (loadedFilename.isNotEmpty()) {
-        g.setColour(juce::Colours::white);
-        g.setFont(juce::Font(12.0f));
-        g.drawText(loadedFilename, getLocalBounds().reduced(5, 40), juce::Justification::centred);
+    // 7. Recording Dot
+    if (isRecording) {
+        float blink = (float)std::abs(std::sin(juce::Time::getMillisecondCounterHiRes() * 0.01));
+        g.setColour(juce::Colours::red.withAlpha(0.5f + 0.5f * blink));
+        g.fillEllipse(area.getX() + 10, area.getY() + 10, 10, 10);
     }
 }
 
 void PadComponent::resized()
 {
-    auto area = getLocalBounds().reduced(5);
-    auto bottom = area.removeFromBottom(25);
-    recordBtn.setBounds(bottom.removeFromLeft(25));
-    loopBtn.setBounds(bottom.removeFromLeft(25));
-    ejectBtn.setBounds(bottom.removeFromLeft(25));
-    volumeSlider.setBounds(area.removeFromRight(15).reduced(2));
+    auto area = getLocalBounds();
+    
+    // Position invisible volume slider on the right edge where the indicator is drawn
+    volumeSlider.setBounds(area.removeFromRight(15).reduced(2, 10));
+
+    auto controlsArea = area.removeFromBottom(25).reduced(5, 0);
+    recordBtn.setBounds(controlsArea.removeFromLeft(25));
+    loopBtn.setBounds(controlsArea.removeFromLeft(25));
+    ejectBtn.setBounds(controlsArea.removeFromLeft(25));
 }
 
 void PadComponent::mouseDown (const juce::MouseEvent& e)
 {
     if (e.mods.isRightButtonDown()) { if (onRightClick) onRightClick(); return; }
-    
-    if (onLeftClick) onLeftClick();
+    if (onLeftClick && onLeftClick()) return;
 
     isMouseDown = true;
     isActive = !isActive;
-    if (onPlayStateChanged) onPlayStateChanged (index, isActive);
+
+    if (onPlayStateChanged) {
+        if (isActive) {
+            // If starting one-shot (loop off), force restart from 0
+            if (!isLoopActive) onPlayStateChanged(index, false);
+            onPlayStateChanged(index, true);
+        } else {
+            onPlayStateChanged(index, false); // Stop immediately
+        }
+    }
+    
     repaint();
 }
 
@@ -111,7 +184,12 @@ void PadComponent::mouseUp (const juce::MouseEvent& e)
 }
 
 void PadComponent::setLoadedFile (const juce::File& file) { loadedFilename = file.getFileName(); currentFilePath = file.getFullPathName(); repaint(); }
+void PadComponent::setPlayStateExternally (bool playing) { if (isActive != playing) { isActive = playing; repaint(); } }
+void PadComponent::setLoopStateExternally (bool looping) { isLoopActive = looping; loopBtn.setToggleState(looping, juce::dontSendNotification); repaint(); }
 void PadComponent::setRgbInfo(const juce::String& label, juce::Colour color) { rgbLabel = label; currentRgbColor = color; repaint(); }
+
+void PadComponent::eject() { ejectBtn.triggerClick(); }
+void PadComponent::triggerRecord() { recordBtn.triggerClick(); }
 
 bool PadComponent::isInterestedInFileDrag (const juce::StringArray& files) { return true; }
 void PadComponent::filesDropped (const juce::StringArray& files, int x, int y) { if (files.size() > 0 && onFileDropped) onFileDropped(index, juce::File(files[0])); }

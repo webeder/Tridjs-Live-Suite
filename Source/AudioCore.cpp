@@ -495,7 +495,7 @@ void AudioCore::setGlobalPitchRatio(double val)
     juce::Logger::writeToLog("Pitch Value: " + juce::String(val) + " | Speed Factor: " + juce::String(speedFactor) + " | Ratio: " + juce::String(ratio));
 }
 
-bool AudioCore::loadAudioFile (const juce::File& file, int padIndex)
+bool AudioCore::loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop)
 {
     if (padIndex < 0 || padIndex >= (int)padChannels.size()) return false;
     if (!file.existsAsFile()) return false;
@@ -504,6 +504,7 @@ bool AudioCore::loadAudioFile (const juce::File& file, int padIndex)
     if (reader != nullptr)
     {
         auto newSource = std::make_unique<CrossfadingLoopSource> (reader, true);
+        newSource->setLooping(shouldLoop);
         padChannels[padIndex]->transport->setSource (newSource.get(), 0, nullptr, reader->sampleRate);
         padChannels[padIndex]->readerSource = std::move (newSource);
         return true;
@@ -527,6 +528,14 @@ void AudioCore::playPad (int padIndex)
     }
 }
 
+bool AudioCore::isPadPlaying (int padIndex) const
+{
+    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
+        return padChannels[padIndex]->transport->isPlaying();
+    }
+    return false;
+}
+
 void AudioCore::setPadLoop (int padIndex, bool shouldLoop)
 {
     if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
@@ -539,6 +548,15 @@ void AudioCore::stopPad (int padIndex)
 {
     if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
         padChannels[padIndex]->transport->stop();
+    }
+}
+
+void AudioCore::ejectPad (int padIndex)
+{
+    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
+        padChannels[padIndex]->transport->stop();
+        padChannels[padIndex]->transport->setSource(nullptr);
+        padChannels[padIndex]->readerSource.reset();
     }
 }
 

@@ -52,14 +52,15 @@ public:
     {
     public:
     FxSlot(const juce::String& fxName, int slotIndex, bool isDubEcho = false)
-            : name(fxName), index(slotIndex), hasDoubleControl(isDubEcho)
+            : name(fxName.toUpperCase()), index(slotIndex), hasDoubleControl(isDubEcho)
         {
-            toggleBtn.setButtonText(name);
+            // O botão invisível agora cobre o fundo para o clique de ativação
+            toggleBtn.setButtonText("");
             toggleBtn.setClickingTogglesState(true);
-            toggleBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff333333));
-            toggleBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colour((juce::uint32)0xff00aaaa));
+            toggleBtn.setAlpha(0.0f); // Invisível mas funcional
             toggleBtn.onClick = [this] {
                 if (onFxToggled) onFxToggled(index, toggleBtn.getToggleState());
+                repaint();
             };
             addAndMakeVisible(toggleBtn);
             
@@ -67,7 +68,7 @@ public:
             knob1.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
             knob1.setRange(0.0, 1.0, 0.01);
             knob1.setValue(0.5);
-            knob1.setColour(juce::Slider::thumbColourId, juce::Colour(0xff00d1b2));
+            knob1.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::cyan);
             knob1.onValueChange = [this] {
                 if (onFxAmountChanged) onFxAmountChanged(index, (float)knob1.getValue());
             };
@@ -78,7 +79,7 @@ public:
                 knob2.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
                 knob2.setRange(0.0, 1.0, 0.01);
                 knob2.setValue(0.5);
-                knob2.setColour(juce::Slider::thumbColourId, juce::Colour(0xffff0000));
+                knob2.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::orange);
                 addAndMakeVisible(knob2);
             }
         }
@@ -86,13 +87,47 @@ public:
         void updateUI(float amt, bool on) {
             knob1.setValue(amt, juce::dontSendNotification);
             toggleBtn.setToggleState(on, juce::dontSendNotification);
+            repaint();
         }
 
         void setRgbInfo(const juce::String& label, juce::Colour color) {
             rgbLabel = label;
             rgbColor = color;
-            toggleBtn.setColour(juce::TextButton::textColourOffId, color.getBrightness() < 0.5f ? juce::Colours::white : juce::Colours::black);
             repaint();
+        }
+
+        void paint(juce::Graphics& g) override {
+            auto area = getLocalBounds().reduced(2).toFloat();
+            bool isOn = toggleBtn.getToggleState();
+            
+            // Fundo do Pad (estilo imagem 2)
+            g.setColour(juce::Colour(0xff121212));
+            g.fillRoundedRectangle(area, 10.0f);
+            
+            // Borda de ativação (Neon Glow)
+            if (isOn) {
+                g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+                g.drawRoundedRectangle(area, 10.0f, 2.0f);
+                
+                // Glow interno leve
+                g.setGradientFill(juce::ColourGradient(juce::Colours::cyan.withAlpha(0.15f), area.getCentreX(), area.getCentreY(),
+                                                      juce::Colours::transparentBlack, area.getWidth(), area.getHeight(), true));
+                g.fillRoundedRectangle(area, 10.0f);
+            } else {
+                g.setColour(juce::Colours::white.withAlpha(0.1f));
+                g.drawRoundedRectangle(area, 10.0f, 1.0f);
+            }
+
+            // Nome do Efeito no Topo
+            g.setColour(isOn ? juce::Colours::white : juce::Colours::lightgrey);
+            g.setFont(juce::Font("Roboto", 14.0f, juce::Font::bold));
+            g.drawText(name, area.removeFromTop(40).withTrimmedTop(10), juce::Justification::centred);
+            
+            // Indicador RGB se houver
+            if (rgbColor != juce::Colours::transparentBlack) {
+                g.setColour(rgbColor);
+                g.fillRoundedRectangle(area.getRight() - 25, area.getBottom() - 25, 15, 15, 3.0f);
+            }
         }
 
         void mouseDown(const juce::MouseEvent& e) override {
@@ -104,14 +139,18 @@ public:
         }
 
         void resized() override {
-            auto area = getLocalBounds().reduced(5);
-            toggleBtn.setBounds(area.removeFromTop(30));
+            auto area = getLocalBounds();
+            toggleBtn.setBounds(area); // Cobre tudo para clique
+            
+            area.removeFromTop(40); // Espaço do nome
+            auto knobArea = area.reduced(15);
+            
             if (hasDoubleControl) {
-                auto w = area.getWidth() / 2;
-                knob1.setBounds(area.removeFromLeft(w));
-                knob2.setBounds(area);
+                auto left = knobArea.removeFromLeft(knobArea.getWidth() / 2);
+                knob1.setBounds(left.reduced(5));
+                knob2.setBounds(knobArea.reduced(5));
             } else {
-                knob1.setBounds(area);
+                knob1.setBounds(knobArea);
             }
         }
         
@@ -156,7 +195,7 @@ public:
         bool isLearning() const { return learnBtn.getToggleState(); }
         void resized() override {
             auto area = getLocalBounds().reduced(0, 2);
-            label.setBounds(area.removeFromLeft(60));
+            label.setBounds(area.removeFromLeft(120)); // Aumentado para não esmagar o texto
             clearBtn.setBounds(area.removeFromRight(20).reduced(0, 5));
             learnBtn.setBounds(area.removeFromRight(50).reduced(0, 2));
             valueBox.setBounds(area);
@@ -183,6 +222,7 @@ public:
     juce::TextButton removeRgbBrushBtn { "REMOVE EFFECT" };
     juce::TextEditor presetNameEdit;
     juce::Label presetNameLabel { {}, "SESSION NAME:" };
+    juce::Label midiDeviceLabel;
     juce::ComboBox commandCombo;
     juce::Viewport targetViewport;
     juce::Component targetListContent;

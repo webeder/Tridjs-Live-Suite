@@ -5,7 +5,7 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
 {
     // Setup Tabs
     addAndMakeVisible(tabs);
-    tabs.addTab("EFFECTS", juce::Colours::transparentBlack, &effectsContent, false);
+    tabs.addTab("FX", juce::Colours::transparentBlack, &effectsContent, false);
     tabs.addTab("RGB", juce::Colours::transparentBlack, &rgbContent, false);
     tabs.addTab("LEARN", juce::Colours::transparentBlack, &midiLearnContent, false);
     tabs.addTab("SERIAL", juce::Colours::transparentBlack, &serialContent, false);
@@ -21,6 +21,22 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
     configIcon = juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\config.png"));
     deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
         deviceManager, 0, 2, 2, 2, true, true, true, true);
+    
+    // MIDI Device selector (Moved from LEARN to CONFIG)
+    midiDeviceLabel.setText("MIDI INPUT DEVICE:", juce::dontSendNotification);
+    midiDeviceLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    configContent.addAndMakeVisible(midiDeviceLabel);
+
+    deviceManagerCombo.addItem("-- Select MIDI --", 1);
+    auto midiDevices = juce::MidiInput::getAvailableDevices();
+    for (int i = 0; i < midiDevices.size(); ++i)
+        deviceManagerCombo.addItem(midiDevices[i].name, i + 2);
+    deviceManagerCombo.setSelectedId(1);
+    deviceManagerCombo.onChange = [this] {
+        if (onMidiDeviceIndexChanged) onMidiDeviceIndexChanged(deviceManagerCombo.getSelectedId() - 1);
+    };
+    configContent.addAndMakeVisible(deviceManagerCombo);
+    
     configContent.addAndMakeVisible(*deviceSelector);
 
     // ===== FX SLOTS (EFFECTS TAB) =====
@@ -76,8 +92,23 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
 
     // ===== MIDI LEARN TAB =====
     juce::StringArray rowNames;
-    for (int i = 0; i < 9; ++i)  rowNames.add("PAD " + juce::String(i + 1));
-    for (int i = 0; i < 6; ++i)  rowNames.add(fxNames[i]);
+    // 0-8: Pads
+    for (int i = 0; i < 9; ++i)  rowNames.add("PAD " + juce::String(i + 1) + " PLAY");
+    // 9-14: FX Slots
+    for (int i = 0; i < 6; ++i)  rowNames.add(fxNames[i] + " ON/OFF");
+    
+    // Transport & Global
+    rowNames.add("MASTER PLAY");   // 15
+    rowNames.add("MASTER STOP");   // 16
+    rowNames.add("MASTER CUE");    // 17
+    rowNames.add("MASTER EJECT");  // 18
+    rowNames.add("PITCH UP");      // 19
+    rowNames.add("PITCH DOWN");    // 20
+
+    // Pad Controls
+    for (int i = 0; i < 9; ++i)  rowNames.add("PAD " + juce::String(i + 1) + " EJECT");  // 21-29
+    for (int i = 0; i < 9; ++i)  rowNames.add("PAD " + juce::String(i + 1) + " LOOP");   // 30-38
+    for (int i = 0; i < 9; ++i)  rowNames.add("PAD " + juce::String(i + 1) + " RECORD"); // 39-47
 
     for (int i = 0; i < rowNames.size(); ++i) {
         auto row = std::make_unique<MidiMappingRow>(rowNames[i]);
@@ -103,25 +134,6 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager& deviceManager)
 
     mappingViewport.setViewedComponent(&mappingListContent, false);
     midiLearnContent.addAndMakeVisible(mappingViewport);
-
-    // MIDI Device selector
-    deviceManagerCombo.addItem("-- Select MIDI --", 1);
-    auto midiDevices = juce::MidiInput::getAvailableDevices();
-    for (int i = 0; i < midiDevices.size(); ++i)
-        deviceManagerCombo.addItem(midiDevices[i].name, i + 2);
-    deviceManagerCombo.setSelectedId(1);
-    deviceManagerCombo.onChange = [this] {
-        if (onMidiDeviceIndexChanged) onMidiDeviceIndexChanged(deviceManagerCombo.getSelectedId() - 1);
-    };
-    midiLearnContent.addAndMakeVisible(deviceManagerCombo);
-
-    saveMidiBtn.setImages(false, true, true, diskIcon, 1.0f, {}, diskIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), diskIcon, 1.0f, juce::Colours::cyan.withAlpha(0.2f));
-    saveMidiBtn.onClick = [this] { if (onSaveMappingRequested) onSaveMappingRequested(); };
-    midiLearnContent.addAndMakeVisible(saveMidiBtn);
-
-    openMidiBtn.setImages(false, true, true, openIcon, 1.0f, {}, openIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), openIcon, 1.0f, juce::Colours::cyan.withAlpha(0.2f));
-    openMidiBtn.onClick = [this] { if (onOpenMappingRequested) onOpenMappingRequested(); };
-    midiLearnContent.addAndMakeVisible(openMidiBtn);
 
     // ===== SERIAL TAB =====
     inputModeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
@@ -178,10 +190,16 @@ void FxRackComponent::resized()
     tabs.setVisible(true);
     tabs.setBounds(area);
 
-    // ===== EFFECTS TAB =====
-    auto fxArea = effectsContent.getLocalBounds().reduced(10);
-    int slotHeight = fxArea.getHeight() / 6;
-    for (auto& slot : fxSlots) slot->setBounds(fxArea.removeFromTop(slotHeight));
+    // ===== FX SLOTS (EFFECTS TAB - 2 COLUMNS) =====
+    auto fxArea = effectsContent.getLocalBounds().reduced(8);
+    int slotW = fxArea.getWidth() / 2;
+    int slotH = 130; // Altura fixa para estilo Pad
+    
+    for (int i = 0; i < (int)fxSlots.size(); ++i) {
+        int col = i % 2;
+        int row = i / 2;
+        fxSlots[i]->setBounds(fxArea.getX() + col * slotW, fxArea.getY() + row * slotH, slotW, slotH);
+    }
 
     // ===== RGB TAB (Clean Grid Layout) =====
     auto rgbArea = rgbContent.getLocalBounds().reduced(8);
@@ -225,10 +243,6 @@ void FxRackComponent::resized()
     // ===== LEARN TAB =====
     auto learnArea = midiLearnContent.getLocalBounds().reduced(5);
     auto learnTop = learnArea.removeFromTop(35);
-    deviceManagerCombo.setBounds(learnTop.removeFromLeft(learnTop.getWidth() - 80));
-    saveMidiBtn.setBounds(learnTop.removeFromLeft(40).reduced(2));
-    openMidiBtn.setBounds(learnTop.reduced(2));
-
     mappingViewport.setBounds(learnArea);
     mappingListContent.setBounds(0, 0, mappingViewport.getWidth() - 10, (int)midiRows.size() * 35);
     int rowY = 0;
@@ -247,7 +261,10 @@ void FxRackComponent::resized()
     serialLog.setBounds(serialArea);
 
     // ===== CONFIG TAB =====
-    auto configArea = configContent.getLocalBounds().reduced(5);
+    auto configArea = configContent.getLocalBounds().reduced(10);
+    midiDeviceLabel.setBounds(configArea.removeFromTop(20));
+    deviceManagerCombo.setBounds(configArea.removeFromTop(30));
+    configArea.removeFromTop(10);
     deviceSelector->setBounds(configArea);
 }
 

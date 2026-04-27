@@ -3,14 +3,14 @@
 RgbManager::RgbManager(SerialManager& serial) : serialManager(serial)
 {
     // Latest default lighting effects with friendly names (UTF-8)
-    addLightingEffect({"Trovão Rápido", false, {}, "trovaofast"});
-    addLightingEffect({"Trovão Sunset", false, {}, "trovaoslow"});
-    addLightingEffect({"Arco-íris Fade", false, {}, "fadeiris"});
-    addLightingEffect({"Arco-íris Flow", false, {}, "arcoiris"});
-    addLightingEffect({"Batida Centro", false, {}, "beat"});
-    addLightingEffect({"Colisão", false, {}, "impacto"});
-    addLightingEffect({"Fader Duplo", false, {}, "faderduplo"});
-    addLightingEffect({"Super Máquina", false, {}, "rodar"});
+    addLightingEffect({juce::String::fromUTF8("Trovão Rápido"), false, {}, "trovaofast"});
+    addLightingEffect({juce::String::fromUTF8("Trovão Sunset"), false, {}, "trovaoslow"});
+    addLightingEffect({juce::String::fromUTF8("Arco-íris Fade"), false, {}, "fadeiris"});
+    addLightingEffect({juce::String::fromUTF8("Arco-íris Flow"), false, {}, "arcoiris"});
+    addLightingEffect({juce::String::fromUTF8("Batida Centro"), false, {}, "beat"});
+    addLightingEffect({juce::String::fromUTF8("Colisão"), false, {}, "impacto"});
+    addLightingEffect({juce::String::fromUTF8("Fader Duplo"), false, {}, "faderduplo"});
+    addLightingEffect({juce::String::fromUTF8("Super Máquina"), false, {}, "rodar"});
 }
 
 void RgbManager::addLightingEffect(const RgbPreset& effect)

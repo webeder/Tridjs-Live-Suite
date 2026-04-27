@@ -16,7 +16,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
 
-    std::function<void()> onLeftClick;
+    std::function<bool()> onLeftClick;
     std::function<void()> onRightClick;
 
     std::function<void(int padIndex, const juce::File& file)> onFileDropped;
@@ -30,8 +30,14 @@ public:
     juce::String getLoadedFilePath() const { return currentFilePath; }
     void setInputLevel (float level) { lastInputLevel = level; }
     bool isRecordingMode() const { return isRecording; }
+    bool isLoopMode() const { return isLoopActive; }
 
+    void setPlayStateExternally (bool playing);
+    void setLoopStateExternally (bool looping);
     void setRgbInfo(const juce::String& label, juce::Colour color);
+    
+    void eject();
+    void triggerRecord();
 
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
@@ -61,6 +67,13 @@ private:
     float lastInputLevel = 0.0f;
     juce::Colour currentRgbColor = juce::Colours::transparentBlack;
     juce::String rgbLabel;
+
+    // Design Constants
+    const juce::Colour colorCyan = juce::Colour(0xff00ffff);
+    const juce::Colour colorOrange = juce::Colour(0xffff3d00);
+    const juce::Colour colorNeon = juce::Colour(0xffd5ff00);
+    const juce::Colour colorBgStart = juce::Colour(0xff1a1a1a);
+    const juce::Colour colorBgEnd = juce::Colour(0xff0d0d0d);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PadComponent)
 };

@@ -1,7 +1,11 @@
 #include "MainComponent.h"
 
-MainComponent::MainComponent() : fxRack(deviceManager), header (audioEngine.getThumbnail()), rgbManager(inputManager.getSerialManager()) {
-  setLookAndFeel(&customTheme);
+MainComponent::MainComponent() 
+    : header (audioEngine.getThumbnail()),
+      fxRack (deviceManager),
+      rgbManager (inputManager.getSerialManager())
+{
+    setLookAndFeel (&customTheme);
   setSize(1024, 768);
 
   loadAllSettings();
@@ -140,7 +144,13 @@ MainComponent::MainComponent() : fxRack(deviceManager), header (audioEngine.getT
   // Wire Pads
   for (int i = 0; i < (int)gridPads.getPads().size(); ++i) {
     auto& pad = gridPads.getPads()[i];
-    pad->onLeftClick = [this, i, handleAssign] { if (fxRack.isRgbTabActive()) handleAssign(0, i); };
+    pad->onLeftClick = [this, i, handleAssign] { 
+        if (fxRack.isRgbTabActive()) {
+            handleAssign(0, i); 
+            return true; // Click consumed by RGB assignment
+        }
+        return false; // Click not consumed
+    };
     pad->onRightClick = [this, i, handleClear] {
         juce::PopupMenu m;
         m.addItem(1, "Remover RGB");
@@ -154,8 +164,13 @@ MainComponent::MainComponent() : fxRack(deviceManager), header (audioEngine.getT
       rgbManager.triggerRgb(rgbManager.getPadMapping(i), playing);
     };
     pad->onLoopToggled = [this, i](int, bool looping) { audioEngine.setPadLoop(i, looping); };
+    pad->onEjectRequested = [this, i](int) {
+        audioEngine.ejectPad(i);
+        saveAllSettings();
+    };
     pad->onFileDropped = [this, i](int, const juce::File &f) {
-        if (audioEngine.loadAudioFile(f, i)) {
+        bool shouldLoop = gridPads.getPads()[i]->isLoopMode();
+        if (audioEngine.loadAudioFile(f, i, shouldLoop)) {
             gridPads.getPads()[i]->setLoadedFile(f);
             saveAllSettings();
         }
@@ -163,9 +178,11 @@ MainComponent::MainComponent() : fxRack(deviceManager), header (audioEngine.getT
     pad->onRecordRequested = [this, i](int) {
         if (gridPads.getPads()[i]->isRecordingMode()) audioEngine.startPadRecording(i);
         else audioEngine.stopPadRecording(i, [this, i](juce::File recordedFile){
-            juce::Timer::callAfterDelay(200, [this, i, recordedFile]{
+            juce::Timer::callAfterDelay(300, [this, i, recordedFile]{
                 juce::MessageManager::callAsync([this, i, recordedFile]{
-                    if (audioEngine.loadAudioFile(recordedFile, i)) {
+                    audioEngine.stopPad(i); // Stop any current playback
+                    bool shouldLoop = gridPads.getPads()[i]->isLoopMode();
+                    if (audioEngine.loadAudioFile(recordedFile, i, shouldLoop)) {
                         gridPads.getPads()[i]->setLoadedFile(recordedFile);
                         saveAllSettings();
                     }
@@ -207,11 +224,12 @@ MainComponent::MainComponent() : fxRack(deviceManager), header (audioEngine.getT
   fxRack.onInputModeChanged = [this](int modeIdx) { inputManager.setInputMode(static_cast<InputManager::InputMode>(modeIdx)); };
   fxRack.onSerialPortChanged = [this](const juce::String& port) { inputManager.openSerialPort(port); };
 
-  setAudioChannels (0, 2);
+  setAudioChannels (2, 2);
   startTimer(50);
 }
 
 MainComponent::~MainComponent() {
+    saveAllSettings(); // SALVAR TUDO AO SAIR
     stopTimer();
     shutdownAudio();
 }
@@ -232,6 +250,12 @@ void MainComponent::timerCallback() {
     header.updateTransportInfo(audioEngine.getMainTrackPosition(), audioEngine.getMainTrackLength(), audioEngine.isMainTrackPlaying());
     header.updatePeakLevel(audioEngine.getCurrentPeakLevel());
     header.updateBpmDisplay(audioEngine.getMainTrackBpm());
+    
+    // Auto-reset Pad borders when audio finishes (One-shot mode)
+    auto& pads = gridPads.getPads();
+    for (int i = 0; i < (int)pads.size(); ++i) {
+        pads[i]->setPlayStateExternally(audioEngine.isPadPlaying(i));
+    }
     
     footer.setPlaying(audioEngine.isMainTrackPlaying());
     footer.setBpm(audioEngine.getMainTrackBpm());
@@ -289,9 +313,11 @@ void MainComponent::loadAllSettings() {
             for (auto* node = padsNode->getFirstChildElement(); node != nullptr; node = node->getNextElement()) {
                 int idx = node->getIntAttribute("idx");
                 juce::String file = node->getStringAttribute("file");
+                bool shouldLoop = node->getBoolAttribute("loop");
                 if (file.isNotEmpty()) {
-                    audioEngine.loadAudioFile(juce::File(file), idx);
+                    audioEngine.loadAudioFile(juce::File(file), idx, shouldLoop);
                     gridPads.getPads()[idx]->setLoadedFile(juce::File(file));
+                    gridPads.getPads()[idx]->setLoopStateExternally(shouldLoop);
                 }
             }
         }
@@ -344,9 +370,11 @@ void MainComponent::saveAllSettings() {
                              (int)inputManager.getInputMode(), inputManager.getSerialManager().getCurrentPort());
 
     // 3. Pads
-    juce::StringArray paths;
-    for (auto& pad : gridPads.getPads()) paths.add(pad->getLoadedFilePath());
-    persistence.savePadAssignments(paths);
+    std::vector<PersistenceManager::PadState> padStates;
+    for (auto& pad : gridPads.getPads()) {
+        padStates.push_back({ pad->getLoadedFilePath(), pad->isLoopMode() });
+    }
+    persistence.savePadAssignments(padStates);
 
     // 4. Mappings
     persistence.saveMidiMapping("default_mapping", "Combined", midiMappings);
@@ -356,11 +384,42 @@ void MainComponent::saveAllSettings() {
 }
 
 void MainComponent::applyMidiAction(int rowIdx, float value) {
+    bool pressed = value > 0.0f;
+    
+    // 0-8: Pad Play
     if (rowIdx < 9) { 
-        if (value > 0.0f) audioEngine.playPad(rowIdx);
+        if (pressed) audioEngine.playPad(rowIdx);
         else audioEngine.stopPad(rowIdx);
-    } else if (rowIdx >= 9 && rowIdx <= 14) {
-        audioEngine.setFxEnabled(rowIdx - 9, value > 0.0f);
+    } 
+    // 9-14: FX Slots
+    else if (rowIdx >= 9 && rowIdx <= 14) {
+        audioEngine.setFxEnabled(rowIdx - 9, pressed);
+        fxRack.updateFxDisplay(rowIdx - 9, 1.0f, pressed);
+    }
+    // 15-18: Transport
+    else if (rowIdx == 15 && pressed) audioEngine.playMainTrack();
+    else if (rowIdx == 16 && pressed) audioEngine.stopMainTrack();
+    else if (rowIdx == 17 && pressed) audioEngine.seekMainTrack(0.0);
+    else if (rowIdx == 18 && pressed) audioEngine.ejectMainTrack();
+    // 19-20: Pitch (Fixed increment for now)
+    else if (rowIdx == 19 && pressed) header.incrementPitch(0.01);
+    else if (rowIdx == 20 && pressed) header.incrementPitch(-0.01);
+    // 21-29: Pad Eject
+    else if (rowIdx >= 21 && rowIdx <= 29 && pressed) {
+        int pIdx = rowIdx - 21;
+        gridPads.getPads()[pIdx]->eject();
+    }
+    // 30-38: Pad Loop
+    else if (rowIdx >= 30 && rowIdx <= 38 && pressed) {
+        int pIdx = rowIdx - 30;
+        bool newState = !gridPads.getPads()[pIdx]->isLoopMode();
+        gridPads.getPads()[pIdx]->setLoopStateExternally(newState);
+        audioEngine.setPadLoop(pIdx, newState);
+    }
+    // 39-47: Pad Record
+    else if (rowIdx >= 39 && rowIdx <= 47 && pressed) {
+        int pIdx = rowIdx - 39;
+        gridPads.getPads()[pIdx]->triggerRecord();
     }
 }
 

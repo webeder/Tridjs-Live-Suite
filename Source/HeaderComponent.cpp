@@ -460,8 +460,9 @@ void HeaderComponent::updateTrackVolumeFromExtern(float v)
     volumeValue.setText(juce::String((int)(v * 100.0)), juce::dontSendNotification);
 }
 
-void HeaderComponent::updateBpmDisplay(double bpm)
-{
-    bpmDisplay.setText("BPM: " + juce::String(bpm, 1), juce::dontSendNotification);
-}
+void HeaderComponent::updateBpmDisplay(double bpm) { bpmDisplay.setText("BPM: " + juce::String(bpm, 2), juce::dontSendNotification); }
 
+void HeaderComponent::incrementPitch(float delta) {
+    float newVal = juce::jlimit(-1.0f, 1.0f, (float)pitchSlider.getValue() + delta);
+    pitchSlider.setValue(newVal, juce::sendNotification);
+}

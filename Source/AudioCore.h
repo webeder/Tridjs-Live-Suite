@@ -18,7 +18,7 @@ public:
     void releaseResources();
 
     // Carrega um arquivo de áudio de forma thread-safe num canal interno do mixer
-    bool loadAudioFile (const juce::File& file, int padIndex);
+    bool loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop = false);
     
     // Controles do Deck Principal
     bool loadMainTrack (const juce::File& file);
@@ -34,6 +34,8 @@ public:
     // Controles de Playback dos Pads
     void playPad (int padIndex);
     void stopPad (int padIndex);
+    void ejectPad (int padIndex);
+    bool isPadPlaying (int padIndex) const;
     void setPadLoop (int padIndex, bool shouldLoop);
     void setPadVolume (int padIndex, float gain);
     
@@ -136,7 +138,7 @@ private:
     private:
         std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
         double currentSampleRate = 44100.0;
-        bool looping = true;
+        bool looping = false;
         int crossfadeSamples = 220; // 5ms in samples
     };
 

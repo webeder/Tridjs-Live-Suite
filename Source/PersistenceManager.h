@@ -159,15 +159,17 @@ public:
         }
     }
 
-    void savePadAssignments(const juce::StringArray& padPaths)
+    struct PadState { juce::String path; bool isLooping; };
+    void savePadAssignments(const std::vector<PadState>& padStates)
     {
         juce::XmlElement xml("project");
         xml.setAttribute("version", "1.0");
         auto* pads = xml.createNewChildElement("PAD_ASSIGNMENTS");
-        for (int i = 0; i < padPaths.size(); ++i) {
+        for (int i = 0; i < (int)padStates.size(); ++i) {
             auto* p = pads->createNewChildElement("PAD");
             p->setAttribute("idx", i);
-            p->setAttribute("file", padPaths[i]);
+            p->setAttribute("file", padStates[i].path);
+            p->setAttribute("loop", padStates[i].isLooping);
         }
         auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("data/pads.xml");
         xml.writeTo(file);

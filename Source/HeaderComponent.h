@@ -33,6 +33,7 @@ public:
     void updateMasterVolumeFromExtern (float v);
     void updateTrackVolumeFromExtern (float v);
     void updateBpmDisplay (double bpm);
+    void incrementPitch(float delta);
 
     // DragAndDrop overrides
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
