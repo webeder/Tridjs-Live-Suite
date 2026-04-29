@@ -21,7 +21,8 @@
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
                        public juce::Timer,
-                       public juce::MenuBarModel
+                       public juce::MenuBarModel,
+                       public juce::ApplicationCommandTarget
 {
 public:
     MainComponent();
@@ -39,6 +40,22 @@ public:
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int topLevelMenuIndex, const juce::String& menuName) override;
     void menuItemSelected (int menuItemID, int topLevelMenuIndex) override;
+    
+    // ApplicationCommandTarget implementation
+    juce::ApplicationCommandTarget* getNextCommandTarget() override;
+    void getAllCommands (juce::Array<juce::CommandID>& commands) override;
+    void getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& result) override;
+    bool perform (const InvocationInfo& info) override;
+
+    enum CommandIDs
+    {
+        navFx = 0x1000,
+        navFxTouch,
+        navRgb,
+        navLearn,
+        navSerial,
+        navConfig
+    };
 
     void saveAllSettings();
     void loadAllSettings();
@@ -95,6 +112,8 @@ private:
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter;
     std::unique_ptr<juce::FileChooser> fileChooser;
     double currentSampleRate = 44100.0;
+    
+    juce::ApplicationCommandManager commandManager;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

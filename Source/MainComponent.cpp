@@ -16,6 +16,11 @@ MainComponent::MainComponent()
     menuBar = std::make_unique<juce::MenuBarComponent>(this);
     addAndMakeVisible(menuBar.get());
 
+    // Command Manager setup
+    commandManager.registerAllCommandsForTarget(this);
+    addKeyListener(commandManager.getKeyMappings());
+    setWantsKeyboardFocus(true);
+
     setSize(1024, 768);
     loadAllSettings();
 
@@ -323,12 +328,12 @@ juce::StringArray MainComponent::getMenuBarNames() {
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) {
     juce::PopupMenu menu;
     if (menuName == "Geral") {
-        menu.addItem(100, "FX");
-        menu.addItem(101, "FX Touch");
-        menu.addItem(102, "RGB");
-        menu.addItem(103, "Learn");
-        menu.addItem(104, "Serial");
-        menu.addItem(105, "Config");
+        menu.addCommandItem(&commandManager, navFx);
+        menu.addCommandItem(&commandManager, navFxTouch);
+        menu.addCommandItem(&commandManager, navRgb);
+        menu.addCommandItem(&commandManager, navLearn);
+        menu.addCommandItem(&commandManager, navSerial);
+        menu.addCommandItem(&commandManager, navConfig);
     } else if (menuName == "Layout") {
         menu.addItem(1, "DJ Hand Free", true, currentMode == LayoutMode::HandFree);
         menu.addItem(2, "DJ Mixer (Em breve)", true, currentMode == LayoutMode::Mixer);
@@ -342,12 +347,66 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
 }
 
 void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
-    if (menuItemID >= 100 && menuItemID <= 105) navegarParaAba(menuItemID - 100);
-    else if (menuItemID == 1) setLayoutMode(0);
+    if (menuItemID == 1) setLayoutMode(0);
     else if (menuItemID == 2) setLayoutMode(1);
     else if (menuItemID == 10) showAboutWindow();
     else if (menuItemID == 11) showLicenseWindow();
     else if (menuItemID == 20) showDonateWindow();
+}
+
+// ApplicationCommandTarget implementation
+juce::ApplicationCommandTarget* MainComponent::getNextCommandTarget() { return nullptr; }
+
+void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
+    const juce::CommandID ids[] = { navFx, navFxTouch, navRgb, navLearn, navSerial, navConfig };
+    commands.addArray(ids, juce::numElementsInArray(ids));
+}
+
+void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
+    switch (commandID)
+    {
+    case navFx:
+        result.setInfo("FX", "Navegar para aba de FX", "Navigation", 0);
+        result.addDefaultKeypress('f', juce::ModifierKeys::commandModifier);
+        break;
+    case navFxTouch:
+        result.setInfo("FX Touch", "Navegar para aba de FX Touch", "Navigation", 0);
+        result.addDefaultKeypress('t', juce::ModifierKeys::commandModifier);
+        break;
+    case navRgb:
+        result.setInfo("RGB", "Navegar para aba de RGB", "Navigation", 0);
+        result.addDefaultKeypress('r', juce::ModifierKeys::commandModifier);
+        break;
+    case navLearn:
+        result.setInfo("Learn", "Navegar para aba de MIDI Learn", "Navigation", 0);
+        result.addDefaultKeypress('l', juce::ModifierKeys::commandModifier);
+        break;
+    case navSerial:
+        result.setInfo("Serial", "Navegar para aba de Serial", "Navigation", 0);
+        result.addDefaultKeypress(',', juce::ModifierKeys::commandModifier);
+        result.addDefaultKeypress('m', juce::ModifierKeys::commandModifier);
+        break;
+    case navConfig:
+        result.setInfo("Config", "Navegar para aba de Configurações", "Navigation", 0);
+        result.addDefaultKeypress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
+        break;
+    default:
+        break;
+    }
+}
+
+bool MainComponent::perform(const InvocationInfo& info) {
+    switch (info.commandID)
+    {
+    case navFx:      navegarParaAba(0); return true;
+    case navFxTouch: navegarParaAba(1); return true;
+    case navRgb:     navegarParaAba(2); return true;
+    case navLearn:   navegarParaAba(3); return true;
+    case navSerial:  navegarParaAba(4); return true;
+    case navConfig:  navegarParaAba(5); return true;
+    default:
+        return false;
+    }
 }
 
 void MainComponent::setLayoutMode(int mode) {

@@ -145,8 +145,9 @@ private:
     // Record
     juce::TextButton recordButton { "REC" };
     juce::TextButton ejectButton { "EJT" };
-    juce::Label recordDuration { {}, "00:00" };
+    juce::Label recordDuration { {}, "00:00:00" };
     bool isRecording = false;
+    juce::uint32 recordStartTime = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderComponent)
 };

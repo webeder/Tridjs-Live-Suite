@@ -105,16 +105,23 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     addAndMakeVisible(gearBtn);
 
     // Record block
-    recordButton.setColour (juce::TextButton::buttonColourId, juce::Colour ((juce::uint32)0x33aa2222));
-    recordButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::red);
+    recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    recordButton.setColour (juce::TextButton::textColourOffId, juce::Colour(0xff00F0FF));
+    recordButton.setColour (juce::TextButton::textColourOnId, juce::Colours::red);
     recordButton.setClickingTogglesState(true);
     recordButton.onClick = [this] {
         isRecording = recordButton.getToggleState();
+        if (isRecording) recordStartTime = juce::Time::getMillisecondCounter();
+        else recordDuration.setText("00:00:00", juce::dontSendNotification);
+        
         if (onRecordToggled)
             onRecordToggled(isRecording);
     };
     addAndMakeVisible (recordButton);
 
+    recordDuration.setColour(juce::Label::textColourId, juce::Colours::white);
+    recordDuration.setFont(juce::Font("Consolas", 15.0f, juce::Font::plain));
+    recordDuration.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(recordDuration);
 
     // Loop Setup
@@ -176,7 +183,20 @@ HeaderComponent::~HeaderComponent()
 
 void HeaderComponent::timerCallback()
 {
+    if (isRecording)
+    {
+        auto elapsedMs = juce::Time::getMillisecondCounter() - recordStartTime;
+        int totalSecs = (int)(elapsedMs / 1000);
+        int mins = (totalSecs / 60) % 60;
+        int hours = totalSecs / 3600;
+        int secs = totalSecs % 60;
+        
+        recordDuration.setText(juce::String::formatted("%02d:%02d:%02d", hours, mins, secs), juce::dontSendNotification);
+        recordDuration.setColour(juce::Label::textColourId, (juce::Time::getMillisecondCounter() % 1000 < 500) ? juce::Colours::red : juce::Colours::white);
+    }
+
     waveformDisplay.repaint();
+    repaint(); // For record dot flashing
 }
 
 void HeaderComponent::updateTransportInfo (double positionSeconds, double trackLengthSeconds, bool playing)
@@ -538,6 +558,23 @@ void HeaderComponent::WaveformDisplay::mouseDown (const juce::MouseEvent& e)
 void HeaderComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour ((juce::uint32)0xff252525));
+    
+    // Desenhar o Dot do Record (Estilo imagem 2)
+    auto recBounds = recordButton.getBounds();
+    float dotSize = 12.0f;
+    float dotX = (float)recBounds.getX() - 18.0f;
+    float dotY = (float)recBounds.getCentreY() - (dotSize / 2.0f);
+    
+    if (isRecording) {
+        // Glow vermelho
+        g.setColour(juce::Colours::red.withAlpha(0.3f));
+        g.fillEllipse(dotX - 4, dotY - 4, dotSize + 8, dotSize + 8);
+        g.setColour(juce::Colours::red);
+        g.fillEllipse(dotX, dotY, dotSize, dotSize);
+    } else {
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.fillEllipse(dotX, dotY, dotSize, dotSize);
+    }
 }
 
 void HeaderComponent::resized()
@@ -548,12 +585,7 @@ void HeaderComponent::resized()
     auto topArea = area.removeFromTop(85);
     
     // Waveform takes most of the remaining top
-    waveformDisplay.setBounds(topArea.removeFromLeft(topArea.getWidth() - 60));
-
-    // Record block on the right of top area - Smaller button
-    auto recArea = topArea;
-    recordButton.setBounds(recArea.removeFromTop(30).reduced(2));
-    recordDuration.setBounds(recArea.removeFromTop(25));
+    waveformDisplay.setBounds(topArea);
 
     // Bottom area (controls row)
     auto bottomArea = area;
@@ -587,8 +619,13 @@ void HeaderComponent::resized()
     gearBtn.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
 
     // Loop Controls (Compactos e juntos)
-    auto loopArea = bottomArea.removeFromLeft(180);
+    auto loopArea = bottomArea.removeFromLeft(280); // Increased to fit REC
     autoLoopBtn.setBounds(loopArea.removeFromLeft(80).reduced(4, 10));
+    
+    // Record block (Lado Beats)
+    auto recBlock = loopArea.removeFromLeft(100);
+    recordButton.setBounds(recBlock.removeFromTop(25).withTrimmedLeft(20));
+    recordDuration.setBounds(recBlock);
     
     auto adjArea = loopArea.reduced(2, 5);
     auto topAdj = adjArea.removeFromTop(20);
