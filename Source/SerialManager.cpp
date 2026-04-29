@@ -186,6 +186,7 @@ void SerialManager::run()
         {
             if (bytesRead > 0)
             {
+                if (onDataReceived) onDataReceived(buffer, (int)bytesRead);
                 processBuffer(buffer, (int)bytesRead);
             }
         }
@@ -238,17 +239,27 @@ void SerialManager::sendString(const juce::String& text)
     
     txQueue.add(text);
 }
+void SerialManager::sendRawData(const char* data, int size)
+{
+    if (hSerial == INVALID_HANDLE_VALUE) return;
+    juce::ScopedLock sl(txLock);
+    binaryTxQueue.add(juce::MemoryBlock(data, size));
+}
 
 void SerialManager::processTxQueue()
 {
     juce::StringArray queueCopy;
+    juce::Array<juce::MemoryBlock> binaryCopy;
     {
         juce::ScopedLock sl(txLock);
-        if (txQueue.isEmpty()) return;
+        if (txQueue.isEmpty() && binaryTxQueue.isEmpty()) return;
         queueCopy = txQueue;
         txQueue.clear();
+        binaryCopy = binaryTxQueue;
+        binaryTxQueue.clear();
     }
 
+    // Processar String Queue (Protocolo Legado)
     for (const auto& msg : queueCopy)
     {
         juce::String toSend = msg;
@@ -256,11 +267,29 @@ void SerialManager::processTxQueue()
         
         DWORD bytesWritten;
         WriteFile(hSerial, toSend.toRawUTF8(), (DWORD)toSend.length(), &bytesWritten, NULL);
-        FlushFileBuffers(hSerial);
         
         if (onRawDataSent) 
         {
             juce::String debugMsg = toSend.trim();
+            juce::MessageManager::callAsync([this, debugMsg] {
+                if (onRawDataSent) onRawDataSent(debugMsg);
+            });
+        }
+    }
+
+    // Processar Binary Queue (MIDI e Novos Comandos)
+    for (const auto& block : binaryCopy)
+    {
+        DWORD bytesWritten;
+        WriteFile(hSerial, block.getData(), (DWORD)block.getSize(), &bytesWritten, NULL);
+        
+        if (onRawDataSent) 
+        {
+            juce::String hex;
+            const uint8_t* d = (const uint8_t*)block.getData();
+            for (int i=0; i < (int)block.getSize(); ++i) hex += juce::String::toHexString((int)d[i]) + " ";
+            juce::String debugMsg = "TX MIDI: " + hex.trim().toUpperCase();
+            
             juce::MessageManager::callAsync([this, debugMsg] {
                 if (onRawDataSent) onRawDataSent(debugMsg);
             });

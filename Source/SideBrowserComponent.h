@@ -17,6 +17,7 @@ public:
     std::function<void(bool /*isExpanded*/)> onExpandedChanged;
     
     bool isExpanded() const { return expanded; }
+    void setExpanded(bool shouldExpand);
     int getComponentWidth() const { return expanded ? 250 : 25; }
 
 private:

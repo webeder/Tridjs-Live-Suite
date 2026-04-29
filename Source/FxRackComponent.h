@@ -141,7 +141,7 @@ public:
     juce::TextButton modeBtn;
 };
 
-class FxRackComponent : public juce::Component
+class FxRackComponent : public juce::Component, public juce::Timer
 {
 public:
     FxRackComponent(juce::AudioDeviceManager& deviceManager);
@@ -310,6 +310,7 @@ public:
     {
     public:
         MidiMappingRow(const juce::String& lblName) {
+            setName(lblName);
             label.setText(lblName, juce::dontSendNotification);
             valueBox.setText("---", juce::dontSendNotification);
             valueBox.setEditable(true, true, true);
@@ -346,7 +347,7 @@ public:
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     juce::TextButton toggleBtn { "<" };
-    bool expanded = true;
+    bool expanded = false;
     juce::Component effectsContent;
     juce::Component rgbContent;
     juce::ColourSelector colorSelector;
@@ -369,10 +370,12 @@ public:
     juce::Image diskIcon, openIcon;
     juce::Viewport mappingViewport;
     juce::Component mappingListContent;
+    juce::TextEditor searchBox;
     std::vector<std::unique_ptr<MidiMappingRow>> midiRows;
     std::vector<std::unique_ptr<FxSlot>> fxSlots;
     juce::Component serialContent;
     juce::ComboBox inputModeCombo, serialPortCombo;
+    juce::ToggleButton logCheckbox { "Log" };
     juce::TextEditor serialLog;
     juce::Label inputModeLabel { {}, "INPUT MODE" };
     juce::Label serialPortLabel { {}, "SERIAL PORT (115200)" };
@@ -406,6 +409,10 @@ public:
     // XY Pad & FX Touch
     FxTouchTabContent touchTabContent;
 
+    void timerCallback() override;
+
 private:
+    juce::StringArray logBuffer;
+    juce::CriticalSection logLock;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FxRackComponent)
 };

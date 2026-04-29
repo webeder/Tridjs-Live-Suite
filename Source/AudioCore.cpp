@@ -509,8 +509,10 @@ void AudioCore::ejectMainTrack()
 }
 
 void AudioCore::setMainTrackLoopRange(double startTime, double duration) {
-    if (mainTrackChannel && mainTrackChannel->readerSource)
+    if (mainTrackChannel && mainTrackChannel->readerSource) {
+        if (startTime <= 0) startTime = mainTrackChannel->transport->getCurrentPosition();
         mainTrackChannel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
+    }
 }
 
 void AudioCore::setMainTrackLoopEnabled(bool enabled) {
@@ -606,22 +608,17 @@ void AudioCore::setXyFilterEnabled(bool enabled)
 
 void AudioCore::setGlobalPitchRatio(double val)
 {
-    pitchValue = juce::jlimit(-1.0, 1.0, val);
+    val = juce::jlimit(-1.0, 1.0, val);
+    if (std::abs(val - pitchValue) < 0.0001) return; // Ignore tiny changes
     
-    // Convert -1.0..1.0 (representing -8%..+8%) to speed factor
-    // speedFactor 1.08 means 8% faster.
-    double speedFactor = 1.0 + (pitchValue * 0.08);
-    
-    // Resampling ratio = inputSR / outputSR.
-    // If we want 1.08x speed, we need ratio = 1.0 / 1.08.
+    pitchValue = val;
+    double speedFactor = 1.0 + (pitchValue * 0.06);
     double ratio = 1.0 / speedFactor;
     
     mainTrackChannel->resampler->setResamplingRatio(ratio);
     for (auto& pc : padChannels) {
         pc->resampler->setResamplingRatio(ratio);
     }
-
-    juce::Logger::writeToLog("Pitch Value: " + juce::String(val) + " | Speed Factor: " + juce::String(speedFactor) + " | Ratio: " + juce::String(ratio));
 }
 
 bool AudioCore::loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop)

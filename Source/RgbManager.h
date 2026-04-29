@@ -54,6 +54,12 @@ public:
     void loadGlobalPreset(const juce::String& name);
     void deleteGlobalPreset(const juce::String& name);
     juce::StringArray getGlobalPresetNames() const;
+    
+    void setMidiOutput(bool useMidi) { useMidiOutput = useMidi; }
+    bool isMidiOutput() const { return useMidiOutput; }
+
+    void sendRgbCommand(const juce::String& cmd);
+    void sendColor(juce::Colour c);
 
 private:
     SerialManager& serialManager;
@@ -62,7 +68,5 @@ private:
     std::map<int, RgbMapping> fxMappings;
     
     std::vector<RgbGlobalPreset> globalPresets;
-
-    void sendRgbCommand(const juce::String& cmd);
-    void sendColor(juce::Colour c);
+    bool useMidiOutput = false;
 };

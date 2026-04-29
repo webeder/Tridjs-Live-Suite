@@ -45,11 +45,17 @@ public:
 
 private:
     void handleSerialLine(const juce::String& line);
+    void handleSerialData(const char* data, int size);
 
     InputMode currentMode = InputMode::MIDI;
     bool isLearning = false;
     std::unique_ptr<juce::MidiInput> midiInput;
     SerialManager serialManager;
+    
+    // MIDI Stream Parsing
+    uint8_t midiBuffer[3];
+    int midiBufferPtr = 0;
+    int expectedBytes = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(InputManager)
 };

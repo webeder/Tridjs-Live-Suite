@@ -18,7 +18,7 @@ public:
         appDir.getChildFile("data").createDirectory();
     }
 
-    void saveSettings(float masterVol, float trackVol, int inputMode = 0, const juce::String& serialPort = "", int baud = 115200, bool someOption = false)
+    void saveSettings(float masterVol, float trackVol, int inputMode = 0, const juce::String& serialPort = "", bool serialLogEnabled = true)
     {
         juce::XmlElement xml("project");
         xml.setAttribute("version", "1.0");
@@ -28,8 +28,7 @@ public:
         settings->setAttribute("trackVolume", (double)trackVol);
         settings->setAttribute("inputMode", inputMode);
         settings->setAttribute("serialPort", serialPort);
-        settings->setAttribute("serialBaud", baud);
-        settings->setAttribute("someOption", someOption);
+        settings->setAttribute("serialLogEnabled", serialLogEnabled);
         
         auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
                         .getParentDirectory().getChildFile("settings.xml");

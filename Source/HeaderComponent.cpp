@@ -8,7 +8,7 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     };
 
     // Transport Buttons
-    playBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff1a6b1a));
+    playBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff00ff55));
     playBtn.onClick = [this] {
         // If CUE is set and we're stopped, play from CUE point
         if (!waveformDisplay.isPlaying && waveformDisplay.cuePoint > 0.0) {
@@ -33,7 +33,7 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     };
     addAndMakeVisible(ejectButton);
 
-    cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff995500));
+    cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xffffa500));
     cueBtn.onClick = [this] {
         if (waveformDisplay.isPlaying) {
             // While playing: save current pos as cue
@@ -62,13 +62,12 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     };
     addAndMakeVisible(masterKnob);
     
-    masterLabel.setJustificationType(juce::Justification::centred);
-    masterLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    masterLabel.setFont(juce::Font(10.0f));
+    masterLabel.setFont(juce::Font("Roboto", 10.0f, juce::Font::plain));
+    masterLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey.withAlpha(0.8f));
     addAndMakeVisible(masterLabel);
     masterValue.setJustificationType(juce::Justification::centred);
     masterValue.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    masterValue.setFont(juce::Font(11.0f, juce::Font::bold));
+    masterValue.setFont(juce::Font("Roboto", 13.0f, juce::Font::bold));
     addAndMakeVisible(masterValue);
 
     // Volume Track Knob (0 to 100)
@@ -84,13 +83,12 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     };
     addAndMakeVisible(volumeKnob);
 
-    volumeLabel.setJustificationType(juce::Justification::centred);
-    volumeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    volumeLabel.setFont(juce::Font(10.0f));
+    volumeLabel.setFont(juce::Font("Roboto", 10.0f, juce::Font::plain));
+    volumeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey.withAlpha(0.8f));
     addAndMakeVisible(volumeLabel);
     volumeValue.setJustificationType(juce::Justification::centred);
     volumeValue.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    volumeValue.setFont(juce::Font(11.0f, juce::Font::bold));
+    volumeValue.setFont(juce::Font("Roboto", 13.0f, juce::Font::bold));
     addAndMakeVisible(volumeValue);
 
     // LCD
@@ -106,36 +104,6 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     gearBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     addAndMakeVisible(gearBtn);
 
-    // Pitch Slider (-1.0 to 1.0 mapped to -8% to +8%)
-    pitchSlider.setSliderStyle(juce::Slider::LinearVertical);
-    pitchSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    pitchSlider.setRange(-1.0, 1.0, 0.001);
-    pitchSlider.setValue(0.0);
-    pitchSlider.setColour(juce::Slider::thumbColourId, juce::Colours::orange);
-    pitchSlider.onValueChange = [this] {
-        float val = (float)pitchSlider.getValue();
-        float percent = val * 8.0f;
-        pitchValue.setText((percent >= 0 ? "+" : "") + juce::String(percent, 1) + "%", juce::dontSendNotification);
-        if (onPitchChanged) onPitchChanged(val);
-    };
-    addAndMakeVisible(pitchSlider);
-
-    pitchLabel.setJustificationType(juce::Justification::centred);
-    pitchLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    pitchLabel.setFont(juce::Font(10.0f));
-    addAndMakeVisible(pitchLabel);
-
-    pitchValue.setJustificationType(juce::Justification::centred);
-    pitchValue.setColour(juce::Label::textColourId, juce::Colours::orange);
-    pitchValue.setFont(juce::Font(14.0f, juce::Font::bold));
-    pitchValue.setText("0.0%", juce::dontSendNotification);
-    addAndMakeVisible(pitchValue);
-
-    bpmDisplay.setFont(juce::Font(16.0f, juce::Font::bold));
-    bpmDisplay.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    bpmDisplay.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(bpmDisplay);
-
     // Record block
     recordButton.setColour (juce::TextButton::buttonColourId, juce::Colour ((juce::uint32)0x33aa2222));
     recordButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::red);
@@ -150,15 +118,15 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     addAndMakeVisible(recordDuration);
 
     // Loop Setup
-    loopBtn.setClickingTogglesState(true);
-    loopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff444444));
-    loopBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::orange);
-    loopBtn.onClick = [this] {
-        bool active = loopBtn.getToggleState();
+    autoLoopBtn.setClickingTogglesState(true);
+    autoLoopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1a1a1a));
+    autoLoopBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff1a1a1a));
+    autoLoopBtn.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffffa500));
+    autoLoopBtn.setColour(juce::TextButton::textColourOnId, juce::Colour(0xffffa500));
+    autoLoopBtn.onClick = [this] {
+        bool active = autoLoopBtn.getToggleState();
         if (active) {
-            int beats = loopSizeCombo.getSelectedId();
-            if (beats <= 0) beats = 4;
-            double duration = (60.0 / currentBpm) * beats;
+            double duration = (60.0 / currentBpm) * currentLoopBeats;
             double start = waveformDisplay.currentPos;
             if (onLoopSet) onLoopSet(start, duration);
             waveformDisplay.setLoopVisual(start, duration, true);
@@ -167,18 +135,36 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
         }
         if (onLoopEnabled) onLoopEnabled(active);
     };
-    addAndMakeVisible(loopBtn);
+    addAndMakeVisible(autoLoopBtn);
 
-    loopSizeCombo.addItem("1/2", 0); // Need to handle fractions differently? User asked for 1, 2, 4, 8, 16, 32
-    loopSizeCombo.addItem("1 Beat", 1);
-    loopSizeCombo.addItem("2 Beats", 2);
-    loopSizeCombo.addItem("4 Beats", 4);
-    loopSizeCombo.addItem("8 Beats", 8);
-    loopSizeCombo.addItem("16 Beats", 16);
-    loopSizeCombo.addItem("32 Beats", 32);
-    loopSizeCombo.setSelectedId(4);
-    loopSizeCombo.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(loopSizeCombo);
+    loopLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+    loopLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+    addAndMakeVisible(loopLabel);
+
+    loopSizeLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    loopSizeLabel.setFont(juce::Font(16.0f, juce::Font::bold));
+    loopSizeLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(loopSizeLabel);
+
+    loopInBtn.setButtonText("<");
+    loopInBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1e1e1e));
+    loopInBtn.onClick = [this] {
+        currentLoopBeats = std::max(1, currentLoopBeats / 2);
+        autoLoopBtn.setToggleState(true, juce::dontSendNotification);
+        applyCurrentLoop();
+        if (onLoopEnabled) onLoopEnabled(true);
+    };
+    addAndMakeVisible(loopInBtn);
+
+    loopOutBtn.setButtonText(">");
+    loopOutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1e1e1e));
+    loopOutBtn.onClick = [this] {
+        currentLoopBeats = std::min(64, currentLoopBeats * 2);
+        autoLoopBtn.setToggleState(true, juce::dontSendNotification);
+        applyCurrentLoop();
+        if (onLoopEnabled) onLoopEnabled(true);
+    };
+    addAndMakeVisible(loopOutBtn);
 
     startTimer(30);
 }
@@ -193,21 +179,17 @@ void HeaderComponent::timerCallback()
     waveformDisplay.repaint();
 }
 
-void HeaderComponent::updateTransportInfo(double positionSeconds, double trackLengthSeconds, bool playing)
+void HeaderComponent::updateTransportInfo (double positionSeconds, double trackLengthSeconds, bool playing)
 {
-    waveformDisplay.currentPos = positionSeconds;
     waveformDisplay.trackLength = trackLengthSeconds;
     waveformDisplay.isPlaying = playing;
+    waveformDisplay.currentPos = positionSeconds;
     
-    int totalSecs = (int)positionSeconds;
-    int hrs = totalSecs / 3600;
-    int mins = (totalSecs % 3600) / 60;
-    int secs = totalSecs % 60;
-    
-    lcdClock.setText(juce::String::formatted("%02d:%02d:%02d", hrs, mins, secs), juce::dontSendNotification);
+    waveformDisplay.updateOverlays(currentBpm, positionSeconds, playing);
     
     playBtn.setColour(juce::TextButton::buttonColourId, 
-        playing ? juce::Colour((juce::uint32)0xff00cc00) : juce::Colour((juce::uint32)0xff1a6b1a));
+        playing ? juce::Colour((juce::uint32)0xff00ff55) : juce::Colour((juce::uint32)0xff00aa44));
+    repaint();
 }
 
 void HeaderComponent::updatePeakLevel(float peak)
@@ -269,7 +251,31 @@ HeaderComponent::WaveformDisplay::WaveformDisplay (juce::AudioThumbnail& thumb) 
     zoomInBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x33ffffff));
     zoomOutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x33ffffff));
     zoomInBtn.onClick = [this] { setZoomLevel(zoomFactor + 0.5); };
-    zoomOutBtn.onClick = [this] { setZoomLevel(zoomFactor - 0.5); };
+    addAndMakeVisible(zoomInBtn);
+
+    bpmOverlay.setJustificationType(juce::Justification::right);
+    bpmOverlay.setFont(juce::Font("Roboto", 24.0f, juce::Font::bold));
+    bpmOverlay.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    bpmOverlay.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(bpmOverlay);
+
+    timeOverlay.setJustificationType(juce::Justification::right);
+    timeOverlay.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
+    timeOverlay.setColour(juce::Label::textColourId, juce::Colours::white);
+    timeOverlay.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(timeOverlay);
+
+    deckLabel.setJustificationType(juce::Justification::left);
+    deckLabel.setFont(juce::Font("Roboto", 32.0f, juce::Font::bold));
+    deckLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    deckLabel.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(deckLabel);
+
+    trackNameLabel.setJustificationType(juce::Justification::left);
+    trackNameLabel.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
+    trackNameLabel.setColour(juce::Label::textColourId, juce::Colours::green);
+    trackNameLabel.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(trackNameLabel);
 }
 void HeaderComponent::WaveformDisplay::setLoopVisual(double start, double duration, bool active) {
     loopStart = start;
@@ -278,14 +284,49 @@ void HeaderComponent::WaveformDisplay::setLoopVisual(double start, double durati
     repaint();
 }
 
-void HeaderComponent::WaveformDisplay::resized() {
-    auto r = getLocalBounds().removeFromTop(25).removeFromRight(50);
-    zoomOutBtn.setBounds(r.removeFromLeft(22).reduced(1));
-    zoomInBtn.setBounds(r.removeFromLeft(22).reduced(1));
+void HeaderComponent::WaveformDisplay::resized()
+{
+    auto area = getLocalBounds().reduced(10, 5);
+    
+    // Esquerda: Deck e Nome da Música
+    auto leftCol = area.removeFromLeft(area.getWidth() * 0.6f);
+    deckLabel.setBounds(leftCol.removeFromTop(40));
+    trackNameLabel.setBounds(leftCol.removeFromTop(25));
+
+    // Direita: Botões e Tempo/BPM
+    auto rightCol = area;
+    auto btns = rightCol.removeFromTop(25);
+    zoomOutBtn.setBounds(btns.removeFromRight(25).reduced(1));
+    zoomInBtn.setBounds(btns.removeFromRight(25).reduced(1));
+    
+    bpmOverlay.setBounds(rightCol.removeFromTop(30));
+    timeOverlay.setBounds(rightCol.removeFromTop(25));
 }
 
 void HeaderComponent::WaveformDisplay::setZoomIn() { setZoomLevel(zoomFactor + 0.5); }
 void HeaderComponent::WaveformDisplay::setZoomOut() { setZoomLevel(zoomFactor - 0.5); }
+
+void HeaderComponent::WaveformDisplay::updateOverlays(double bpm, double time, bool playing)
+{
+    juce::Colour bpmCol = playing ? juce::Colours::cyan : juce::Colours::grey.withAlpha(0.5f);
+    juce::Colour timeCol = playing ? juce::Colours::white : juce::Colours::grey.withAlpha(0.3f);
+    
+    bpmOverlay.setColour(juce::Label::textColourId, bpmCol);
+    timeOverlay.setColour(juce::Label::textColourId, timeCol);
+    
+    bpmOverlay.setText(juce::String(bpm, 2), juce::dontSendNotification);
+    
+    int totalSecs = (int)std::abs(time);
+    int mins = totalSecs / 60;
+    int secs = totalSecs % 60;
+    int ms = (int)(std::abs(time - (int)time) * 100);
+    juce::String timeStr = (time < 0 ? "-" : "") + juce::String::formatted("%02d:%02d.%02d", mins, secs, ms);
+    timeOverlay.setText(timeStr, juce::dontSendNotification);
+
+    // Update Deck/Track name
+    trackNameLabel.setText(loadedTrackName.isEmpty() ? "EMPTY DECK" : (playing ? "PLAYING: " + loadedTrackName : "READY: " + loadedTrackName), juce::dontSendNotification);
+    trackNameLabel.setColour(juce::Label::textColourId, playing ? juce::Colours::green : juce::Colours::grey.withAlpha(0.6f));
+}
 
 void HeaderComponent::WaveformDisplay::setZoomLevel(double newZoom) {
     zoomFactor = juce::jlimit(1.0, 100.0, newZoom);
@@ -300,82 +341,105 @@ void HeaderComponent::WaveformDisplay::mouseWheelMove (const juce::MouseEvent&, 
 
 void HeaderComponent::WaveformDisplay::generateRgbWaveform (const juce::File& file)
 {
-    std::unique_ptr<juce::AudioFormatReader> reader (formatManager.createReaderFor (file));
-    if (reader == nullptr) return;
+    if (isAnalyzing) return;
+    isAnalyzing = true;
 
-    spectralData.clear();
-    double sampleRate = reader->sampleRate;
-    int64 numSamples = reader->lengthInSamples;
-    
-    // Análise de alta resolução: 50 pontos por segundo
-    int pointsPerSec = 50;
-    int samplesPerPoint = (int)(sampleRate / pointsPerSec);
-    int totalPoints = (int)(numSamples / samplesPerPoint);
-    spectralData.reserve(totalPoints);
-
-    juce::IIRFilter lowFilter, midLowFilter, midHighFilter, highFilter;
-    lowFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 250.0));
-    midLowFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 250.0));
-    midHighFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 4000.0));
-    highFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 4000.0));
-
-    juce::AudioBuffer<float> buffer (reader->numChannels, samplesPerPoint);
-    
-    for (int i = 0; i < totalPoints; ++i)
-    {
-        reader->read(&buffer, 0, samplesPerPoint, (int64)i * samplesPerPoint, true, true);
-        float maxL = 0, maxM = 0, maxH = 0;
+    // Use a background thread to avoid freezing the UI
+    std::thread([this, file]() {
+        juce::AudioFormatManager manager;
+        manager.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> reader (manager.createReaderFor (file));
         
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
-            auto* d = buffer.getReadPointer(ch);
-            for (int s = 0; s < samplesPerPoint; ++s) {
-                float val = d[s];
-                maxL = std::max(maxL, std::abs(lowFilter.processSingleSampleRaw(val)));
-                maxM = std::max(maxM, std::abs(midHighFilter.processSingleSampleRaw(midLowFilter.processSingleSampleRaw(val))));
-                maxH = std::max(maxH, std::abs(highFilter.processSingleSampleRaw(val)));
-            }
+        if (reader == nullptr) {
+            isAnalyzing = false;
+            return;
         }
-        spectralData.push_back({maxL, maxM, maxH});
-    }
-    repaint();
+
+        std::vector<SpectralPoint> tempSpectralData;
+        double sampleRate = reader->sampleRate;
+        juce::int64 numSamples = reader->lengthInSamples;
+        
+        int pointsPerSec = 50;
+        int samplesPerPoint = (int)(sampleRate / pointsPerSec);
+        int totalPoints = (int)(numSamples / samplesPerPoint);
+        tempSpectralData.reserve(totalPoints);
+
+        juce::IIRFilter lowFilter, midLowFilter, midHighFilter, highFilter;
+        lowFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 250.0));
+        midLowFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 250.0));
+        midHighFilter.setCoefficients(juce::IIRCoefficients::makeLowPass(sampleRate, 4000.0));
+        highFilter.setCoefficients(juce::IIRCoefficients::makeHighPass(sampleRate, 4000.0));
+
+        juce::AudioBuffer<float> buffer (reader->numChannels, samplesPerPoint);
+        
+        for (int i = 0; i < totalPoints; ++i)
+        {
+            reader->read(&buffer, 0, samplesPerPoint, (juce::int64)i * samplesPerPoint, true, true);
+            float maxL = 0, maxM = 0, maxH = 0;
+            
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+                auto* d = buffer.getReadPointer(ch);
+                for (int s = 0; s < samplesPerPoint; ++s) {
+                    float val = d[s];
+                    maxL = std::max(maxL, std::abs(lowFilter.processSingleSampleRaw(val)));
+                    maxM = std::max(maxM, std::abs(midHighFilter.processSingleSampleRaw(midLowFilter.processSingleSampleRaw(val))));
+                    maxH = std::max(maxH, std::abs(highFilter.processSingleSampleRaw(val)));
+                }
+            }
+            tempSpectralData.push_back({maxL, maxM, maxH});
+
+            // Periodically check if we should abort? (Optional)
+        }
+
+        juce::MessageManager::callAsync([this, data = std::move(tempSpectralData)]() mutable {
+            spectralData = std::move(data);
+            isAnalyzing = false;
+            repaint();
+        });
+    }).detach();
 }
 
 void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds();
-    g.fillAll(juce::Colour(0xff0f0f0f)); // Fundo Rekordbox
+    g.fillAll(juce::Colour(0xff0f0f0f)); 
 
-    if (loadedTrackName.isNotEmpty() && spectralData.size() > 0)
+    if (isAnalyzing)
     {
-        float width = (float)getWidth();
-        float height = (float)getHeight();
-        float yCenter = height * 0.5f;
+        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.setFont(14.0f);
+        g.drawText("ANALISANDO...", bounds, juce::Justification::centred);
+        return;
+    }
 
-        // Centralização no Playhead: Waveform corre por baixo
+    if (loadedTrackName.isNotEmpty() && !spectralData.empty())
+    {
+        const float width = (float)getWidth();
+        const float height = (float)getHeight();
+        const float yCenter = height * 0.5f;
+
         double visibleDuration = (trackLength > 0) ? (trackLength / zoomFactor) : 10.0;
         double startTime = currentPos - (visibleDuration * 0.5);
         double endTime = currentPos + (visibleDuration * 0.5);
 
-        // Se zoom for 1.0, opcionalmente mostrar a track toda ou manter o comportamento de centro
         if (zoomFactor <= 1.01) {
             startTime = 0;
             endTime = trackLength;
             visibleDuration = trackLength;
         }
 
-        double duration = endTime - startTime;
-        int pointsPerSec = 50;
+        const double duration = endTime - startTime;
+        const int pointsPerSec = 50;
         
-        // Ganhos Espectrais (Conforme Requisito)
-        float vGainL = 1.0f;
-        float vGainM = 1.3f;
-        float vGainH = 1.1f;
+        const float vGainL = 2.8f; 
+        const float vGainM = 4.1f; // Increased for better mid visibility
+        const float vGainH = 3.9f;
         
-        // Estética das Ondas: Ajustar opacidade baseada no Zoom
-        float zoomRatio = juce::jlimit(0.0f, 1.0f, (float)((zoomFactor - 1.0) / 10.0));
-        float hiAlphaMult = 0.4f + (zoomRatio * 0.6f); 
+        const float zoomRatio = juce::jlimit(0.0f, 1.0f, (float)((zoomFactor - 1.0) / 10.0));
+        const float hiAlphaMult = 0.4f + (zoomRatio * 0.6f); 
 
-        int step = (zoomFactor > 10.0) ? 2 : 1; 
+        const int step = (zoomFactor > 15.0) ? 2 : 1; 
+        const float halfH = height * 0.45f;
 
         for (int x = 0; x < getWidth(); x += step)
         {
@@ -386,36 +450,26 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
             
             if (spectralIdx >= 0 && spectralIdx < (int)spectralData.size())
             {
-                auto& p = spectralData[spectralIdx];
+                auto const& p = spectralData[(size_t)spectralIdx];
                 
-                // Aplicação de Ganhos e Threshold (Gatilho de Transparência 5%)
-                float l = p.low * vGainL * 2.8f; 
-                float m = p.mid * vGainM * 3.2f;
-                float h = p.high * vGainH * 3.6f;
+                float l = p.low * vGainL; 
+                float m = p.mid * vGainM;
+                float h = p.high * vGainH;
 
                 float maxAmp = std::max({l, m, h});
-                if (maxAmp < 0.05f) continue; // Gatilho de Transparência: Revela o fundo escuro
+                if (maxAmp < 0.05f) continue;
 
                 l = juce::jlimit(0.0f, 1.0f, l);
                 m = juce::jlimit(0.0f, 1.0f, m);
                 h = juce::jlimit(0.0f, 1.0f, h);
 
-                float totalAmp = juce::jlimit(0.0f, 1.0f, (l + m + h) * 0.6f);
-                float hh = (totalAmp * height) * 0.45f;
+                float totalAmp = juce::jlimit(0.0f, 1.0f, (l + m + h) * 0.5f);
+                float hh = totalAmp * halfH;
 
-                // 1. Efeito de Glow (Brilho suave)
-                g.setColour(juce::Colour::fromFloatRGBA(l, m, h, 0.15f));
-                g.drawVerticalLine(x, yCenter - hh * 1.2f, yCenter + hh * 1.2f);
-
-                // 2. Cor Resultante (Composta) - Não é vermelho sólido
-                // Se houver muito médio/agudo, a cor vira Amarelo/Ciano/Branco
-                juce::Colour compositeColor = juce::Colour::fromFloatRGBA(l, m, h * hiAlphaMult, 1.0f);
+                // Simple composite color - avoid complex RGBA if possible
+                juce::Colour c = juce::Colour::fromFloatRGBA(l, m, h * hiAlphaMult, 1.0f);
                 
-                // 3. Desenho da Linha Fina (1.0px a 1.5px)
-                g.setColour(juce::Colours::black); // Contorno para definição
-                g.drawVerticalLine(x, yCenter - hh - 0.5f, yCenter + hh + 0.5f);
-                
-                g.setColour(compositeColor);
+                g.setColour(c);
                 g.drawVerticalLine(x, yCenter - hh, yCenter + hh);
             }
         }
@@ -429,17 +483,15 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
 
         auto playX = ((currentPos - startTime) / duration) * width;
 
-        // Visual do Loop: Amarelo Translúcido
         if (loopActive && loopDuration > 0.0) {
             double lStart = std::max(startTime, loopStart);
             double lEnd = std::min(endTime, loopStart + loopDuration);
             if (lEnd > lStart) {
                 float lx1 = (float)(((lStart - startTime) / duration) * width);
                 float lx2 = (float)(((lEnd - startTime) / duration) * width);
-                g.setColour(juce::Colours::yellow.withAlpha(0.2f));
+                g.setColour(juce::Colours::yellow.withAlpha(0.15f));
                 g.fillRect(lx1, 0.0f, lx2 - lx1, height);
-                // Borda do loop
-                g.setColour(juce::Colours::yellow.withAlpha(0.5f));
+                g.setColour(juce::Colours::yellow.withAlpha(0.4f));
                 g.drawRect(lx1, 0.0f, lx2 - lx1, height, 1.0f);
             }
         }
@@ -447,9 +499,8 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         g.setColour(juce::Colours::white);
         g.fillRect((float)playX - 1.0f, 0.0f, 2.0f, height);
 
-        // Nome da Track (Posição segura no topo esquerdo)
         g.setColour(juce::Colours::white.withAlpha(0.8f));
-        g.setFont(juce::Font("Roboto", 15.0f, juce::Font::bold));
+        g.setFont(juce::Font("Roboto", 14.0f, juce::Font::bold));
         g.drawText(loadedTrackName, 10, 5, (int)width - 60, 20, juce::Justification::left);
     }
     else if (isDraggingOver) {
@@ -493,35 +544,30 @@ void HeaderComponent::resized()
 {
     auto area = getLocalBounds().reduced(5);
     
-    // Pitch Control (Tall Fader on the far right)
-    auto pArea = area.removeFromRight(50);
-    pitchLabel.setBounds(pArea.removeFromTop(15));
-    pitchValue.setBounds(pArea.removeFromTop(18));
-    pitchSlider.setBounds(pArea.reduced(5, 5));
 
-    auto topArea = area.removeFromTop(75);
+    auto topArea = area.removeFromTop(85);
     
     // Waveform takes most of the remaining top
-    waveformDisplay.setBounds(topArea.removeFromLeft(topArea.getWidth() - 100));
+    waveformDisplay.setBounds(topArea.removeFromLeft(topArea.getWidth() - 60));
 
     // Record block on the right of top area - Smaller button
     auto recArea = topArea;
-    recordButton.setBounds(recArea.removeFromTop(25).reduced(2));
-    recordDuration.setBounds(recArea.removeFromTop(20));
+    recordButton.setBounds(recArea.removeFromTop(30).reduced(2));
+    recordDuration.setBounds(recArea.removeFromTop(25));
 
     // Bottom area (controls row)
     auto bottomArea = area;
     
     // Master knob + value + label
-    auto mastArea = bottomArea.removeFromLeft(70);
-    masterValue.setBounds(mastArea.removeFromTop(14));
-    masterKnob.setBounds(mastArea.removeFromTop(mastArea.getHeight() - 14));
+    auto mastArea = bottomArea.removeFromLeft(75);
+    masterValue.setBounds(mastArea.removeFromTop(20));
+    masterKnob.setBounds(mastArea.removeFromTop(mastArea.getHeight() - 20));
     masterLabel.setBounds(mastArea);
-
+    
     // Volume Track knob + value + label
-    auto volArea = bottomArea.removeFromLeft(70);
-    volumeValue.setBounds(volArea.removeFromTop(14));
-    volumeKnob.setBounds(volArea.removeFromTop(volArea.getHeight() - 14));
+    auto volArea = bottomArea.removeFromLeft(75);
+    volumeValue.setBounds(volArea.removeFromTop(20));
+    volumeKnob.setBounds(volArea.removeFromTop(volArea.getHeight() - 20));
     volumeLabel.setBounds(volArea);
 
     // Transport buttons: PLAY | STOP | CUE
@@ -531,25 +577,27 @@ void HeaderComponent::resized()
     stopBtn.setBounds(transportArea.removeFromLeft(55).reduced(2).withHeight(btnH));
     cueBtn.setBounds(transportArea.removeFromLeft(55).reduced(2).withHeight(btnH));
 
-    // BPM Display
-    bpmDisplay.setBounds(bottomArea.removeFromLeft(100).reduced(5));
-
     // VU Meter
     vuMeter.setBounds(bottomArea.removeFromLeft(120).reduced(2, 8));
 
-    // Right side: Clock, Eject and Settings
-    gearBtn.setBounds(bottomArea.removeFromRight(40).withSizeKeepingCentre(30, 30));
-    lcdClock.setBounds(bottomArea.removeFromRight(100));
-    
-    // Ejetar ao lado de Quantize
-    auto rightBtns = bottomArea.removeFromRight(120);
+    // Right side: Eject, Quantize and Settings
+    auto rightBtns = bottomArea.removeFromRight(180);
     ejectButton.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
     quantToggle.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
+    gearBtn.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
 
-    // Loop Controls (entre BPM e VU)
-    auto loopArea = bottomArea.removeFromLeft(120);
-    loopBtn.setBounds(loopArea.removeFromLeft(50).withSizeKeepingCentre(45, 30));
-    loopSizeCombo.setBounds(loopArea.reduced(2, 8));
+    // Loop Controls (Compactos e juntos)
+    auto loopArea = bottomArea.removeFromLeft(180);
+    autoLoopBtn.setBounds(loopArea.removeFromLeft(80).reduced(4, 10));
+    
+    auto adjArea = loopArea.reduced(2, 5);
+    auto topAdj = adjArea.removeFromTop(20);
+    loopLabel.setBounds(topAdj.removeFromLeft(35));
+    loopSizeLabel.setBounds(topAdj);
+    
+    auto btnRow = adjArea.removeFromTop(25);
+    loopInBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
+    loopOutBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
 }
 
 // ---------------------------------------------------------------
@@ -646,12 +694,21 @@ void HeaderComponent::updateTrackVolumeFromExtern(float v)
     volumeValue.setText(juce::String((int)(v * 100.0)), juce::dontSendNotification);
 }
 
-void HeaderComponent::updateBpmDisplay(double bpm) { 
-    currentBpm = bpm;
-    bpmDisplay.setText("BPM: " + juce::String(bpm, 2), juce::dontSendNotification); 
+void HeaderComponent::applyCurrentLoop()
+{
+    loopSizeLabel.setText(juce::String(currentLoopBeats) + " BEATS", juce::dontSendNotification);
+    
+    if (autoLoopBtn.getToggleState()) {
+        double duration = (60.0 / currentBpm) * currentLoopBeats;
+        // Passamos 0 para o AudioCore começar do ponto atual se não estiver em loop,
+        // ou AudioCore deve ser inteligente o suficiente para redimensionar se já estiver.
+        if (onLoopSet) onLoopSet(0, duration); 
+        waveformDisplay.setLoopVisual(waveformDisplay.currentPos, duration, true);
+    } else {
+        waveformDisplay.setLoopVisual(0, 0, false);
+    }
 }
 
-void HeaderComponent::incrementPitch(float delta) {
-    float newVal = juce::jlimit(-1.0f, 1.0f, (float)pitchSlider.getValue() + delta);
-    pitchSlider.setValue(newVal, juce::sendNotification);
+void HeaderComponent::updateBpmDisplay(double bpm) { 
+    currentBpm = bpm;
 }

@@ -71,6 +71,8 @@ target_sources(TridjsLiveSuite
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h
+        Source/HandFreeComponent.cpp
+        Source/HandFreeComponent.h
         Source/TridjsLookAndFeel.cpp
         Source/TridjsLookAndFeel.h
         Source/HeaderComponent.cpp

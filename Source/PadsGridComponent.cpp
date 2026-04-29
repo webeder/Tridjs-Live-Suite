@@ -13,7 +13,7 @@ PadsGridComponent::PadsGridComponent()
     // Tempo Control Side Panel
     pitchSlider.setSliderStyle (juce::Slider::LinearVertical);
     pitchSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    pitchSlider.setRange (-0.1, 0.1, 0.001); // -10% to +10%
+    pitchSlider.setRange (-0.06, 0.06, 0.001); // +/- 6%
     pitchSlider.setValue (0.0);
     pitchSlider.setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
     pitchSlider.onValueChange = [this] {
@@ -40,8 +40,8 @@ void PadsGridComponent::updateBpmDisplay(double bpm)
 
 void PadsGridComponent::updatePitchFromExtern(float value)
 {
-    // Mapeia valor MIDI 0..1 para o range do slider -0.1..0.1
-    double pitchVal = (value * 0.2) - 0.1;
+    // Mapeia valor MIDI 0..1 para o range do slider -0.06..0.06
+    double pitchVal = (value * 0.12) - 0.06;
     pitchSlider.setValue(pitchVal, juce::dontSendNotification);
 }
 

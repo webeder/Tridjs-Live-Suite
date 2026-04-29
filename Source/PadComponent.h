@@ -4,7 +4,8 @@
 
 class PadComponent : public juce::Component,
                      public juce::FileDragAndDropTarget,
-                     public juce::DragAndDropTarget
+                     public juce::DragAndDropTarget,
+                     public juce::Timer
 {
 public:
     PadComponent (int padIndex);
@@ -48,6 +49,8 @@ public:
     void itemDropped (const juce::DragAndDropTarget::SourceDetails& details) override;
     void itemDragEnter (const juce::DragAndDropTarget::SourceDetails& details) override;
     void itemDragExit (const juce::DragAndDropTarget::SourceDetails& details) override;
+    
+    void timerCallback() override { repaint(); }
 
 private:
     int index;

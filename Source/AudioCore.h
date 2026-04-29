@@ -29,7 +29,7 @@ public:
     void setMainTrackLoopRange (double startTime, double duration);
     void setMainTrackLoopEnabled (bool enabled);
     bool isMainTrackLoopEnabled() const;
-    double getMainTrackBpm() const { return mainTrackBpm * (1.0 + (pitchValue * 0.08)); }
+    double getMainTrackBpm() const { return mainTrackBpm * (1.0 + (pitchValue * 0.06)); }
     double getMainTrackPosition() const;
     double getMainTrackLength() const;
     bool isMainTrackPlaying() const;

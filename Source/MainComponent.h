@@ -5,6 +5,7 @@
 #include <map>
 
 #include "TridjsLookAndFeel.h"
+#include "HandFreeComponent.h"
 
 #include "HeaderComponent.h"
 #include "StemsComponent.h"
@@ -19,7 +20,8 @@
 
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
-                       public juce::Timer
+                       public juce::Timer,
+                       public juce::MenuBarModel
 {
 public:
     MainComponent();
@@ -33,8 +35,22 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
+    // MenuBarModel implementation
+    juce::StringArray getMenuBarNames() override;
+    juce::PopupMenu getMenuForIndex (int topLevelMenuIndex, const juce::String& menuName) override;
+    void menuItemSelected (int menuItemID, int topLevelMenuIndex) override;
+
     void saveAllSettings();
     void loadAllSettings();
+    void resetPitch();
+    void updatePitchFromExtern(float v);
+    void incrementPitch(float delta);
+    
+    void setLayoutMode(int mode);
+    void showAboutWindow();
+    void showLicenseWindow();
+    void showDonateWindow();
+    void navegarParaAba(int tabIndex);
 
 private:
     void loadMidiMappingFromFile (const juce::File& file);
@@ -44,12 +60,29 @@ private:
     AudioCore audioEngine;
     PersistenceManager persistence;
     
-    HeaderComponent header;
-    StemsComponent stems;
-    PadsGridComponent gridPads;
-    FxRackComponent fxRack;
-    FooterComponent footer;
-    SideBrowserComponent sideBrowser;
+    // UI Layouts
+    enum class LayoutMode { HandFree, Mixer };
+    LayoutMode currentMode = LayoutMode::HandFree;
+
+    std::unique_ptr<juce::MenuBarComponent> menuBar;
+    
+    // Components
+    // I'll use the external HandFreeComponent
+    std::unique_ptr<class HandFreeComponent> handFreeComp;
+    
+    struct MixerPlaceholder : public juce::Component {
+        MixerPlaceholder() {
+            addAndMakeVisible(label);
+            label.setText("DJ MIXER - EM BREVE", juce::dontSendNotification);
+            label.setJustificationType(juce::Justification::centred);
+            label.setFont(juce::Font(24.0f, juce::Font::bold));
+            label.setColour(juce::Label::textColourId, juce::Colours::grey);
+        }
+        void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::black.withAlpha(0.8f)); }
+        void resized() override { label.setBounds(getLocalBounds()); }
+        juce::Label label;
+    };
+    MixerPlaceholder mixerPlaceholder;
 
     // Input Management
     InputManager inputManager;

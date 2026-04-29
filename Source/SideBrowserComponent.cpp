@@ -33,18 +33,20 @@ void SideBrowserComponent::buttonClicked (juce::Button* b)
 {
     if (b == &toggleBtn)
     {
-        expanded = !expanded;
-        toggleBtn.setButtonText (expanded ? "<" : ">");
-        
-        if (onExpandedChanged)
-            onExpandedChanged (expanded);
-            
-        // Trigger parent layout update so the body area adjusts
-        if (auto* parent = getParentComponent())
-            parent->resized();
-            
-        resized();
+        setExpanded(!expanded);
     }
+}
+
+void SideBrowserComponent::setExpanded(bool shouldExpand)
+{
+    if (expanded == shouldExpand) return;
+    expanded = shouldExpand;
+    toggleBtn.setButtonText (expanded ? "<" : ">");
+    
+    if (onExpandedChanged)
+        onExpandedChanged (expanded);
+        
+    resized();
 }
 
 void SideBrowserComponent::paint (juce::Graphics& g)
@@ -52,7 +54,7 @@ void SideBrowserComponent::paint (juce::Graphics& g)
     // Fundo global do painel
     g.fillAll (juce::Colour ((juce::uint32)0xff1a1a1a)); 
     
-    // Divisória sutil na última margem para separar da engine de pads
+    // Divisória sutil na margem direita para separar da engine de pads
     g.setColour (juce::Colour(0xff333333));
     g.drawLine((float)getWidth(), 0.0f, (float)getWidth(), (float)getHeight(), 1.5f);
 }
@@ -61,8 +63,8 @@ void SideBrowserComponent::resized()
 {
     auto area = getLocalBounds();
     
-    // O botão expansor ocupa toda altura lateral em 20px
-    auto buttonArea = area.removeFromRight (18);
+    // O botão expansor ocupa toda altura lateral (no lado DIREITO para expandir à direita)
+    auto buttonArea = area.removeFromRight (expanded ? 18 : getWidth());
     toggleBtn.setBounds (buttonArea);
 
     if (expanded)

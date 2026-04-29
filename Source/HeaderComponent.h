@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include <functional>
+#include <algorithm>
 
 class HeaderComponent : public juce::Component,
                         public juce::DragAndDropTarget,
@@ -33,7 +34,6 @@ public:
     void updateMasterVolumeFromExtern (float v);
     void updateTrackVolumeFromExtern (float v);
     void updateBpmDisplay (double bpm);
-    void incrementPitch(float delta);
 
     std::function<void(double, double)> onLoopSet; // start, duration
     std::function<void(bool)> onLoopEnabled;
@@ -78,12 +78,21 @@ private:
         bool loopActive = false;
         double loopStart = 0.0;
         double loopDuration = 0.0;
+        
+        // Novos labels para sobrepor o grid do waveform
+        juce::Label bpmOverlay { {}, "120.00" };
+        juce::Label timeOverlay { {}, "00:00.00" };
+        juce::Label deckLabel { {}, "DECK_01" };
+        juce::Label trackNameLabel { {}, "NO TRACK" };
+        void updateOverlays(double bpm, double time, bool playing);
 
         std::function<void(double)> onSeekToPosition;
 
     private:
         struct SpectralPoint { float low, mid, high; };
         std::vector<SpectralPoint> spectralData;
+        std::vector<SpectralPoint> nextSpectralData; // For background loading
+        std::atomic<bool> isAnalyzing { false };
         
         juce::AudioThumbnail& thumbnail;
         juce::Image waveformImage;
@@ -111,9 +120,12 @@ private:
     juce::TextButton cueBtn  { "CUE" };
 
     // Loop
-    juce::TextButton loopBtn { "LOOP" };
-    juce::ComboBox loopSizeCombo;
+    juce::TextButton autoLoopBtn { "AUTO LOOP" };
+    juce::TextButton loopInBtn { "IN" }, loopOutBtn { "OUT" };
+    juce::Label loopLabel { {}, "LOOP" }, loopSizeLabel { {}, "4 BEATS" };
+    int currentLoopBeats = 4;
     double currentBpm = 120.0;
+    void applyCurrentLoop();
 
     // Knobs
     juce::Slider masterKnob;
@@ -123,9 +135,6 @@ private:
     juce::Label volumeLabel { {}, "VOL TRACK" };
     juce::Label volumeValue { {}, "100" };
 
-    juce::Slider pitchSlider;
-    juce::Label pitchLabel { {}, "PITCH" };
-    juce::Label pitchValue { {}, "1.00x" };
     juce::Label bpmDisplay { {}, "BPM: ---" };
 
     // Indicators

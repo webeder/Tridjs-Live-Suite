@@ -9,7 +9,13 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     recordBtn.setImages(false, true, true, micIcon, 1.0f, {}, micIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), micIcon, 1.0f, juce::Colours::red.withAlpha(0.6f));
     recordBtn.onClick = [this] {
         isRecording = !isRecording;
-        if (isRecording) { isActive = false; if (onPlayStateChanged) onPlayStateChanged(index, false); }
+        if (isRecording) { 
+            isActive = false; 
+            if (onPlayStateChanged) onPlayStateChanged(index, false); 
+            startTimer(100); // 10fps for blinking
+        } else {
+            stopTimer();
+        }
         if (onRecordRequested) onRecordRequested(index);
         repaint();
     };
@@ -33,10 +39,11 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     ejectBtn.setImages(false, true, true, ejectIcon, 1.0f, {}, ejectIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), ejectIcon, 1.0f, juce::Colours::lightgrey.withAlpha(0.6f));
     ejectBtn.onClick = [this] {
         loadedFilename = ""; 
-        currentFilePath = ""; // CLEAR PATH FOR PERSISTENCE
+        currentFilePath = ""; 
         bool wasActive = isActive;
         isActive = false; 
         isRecording = false;
+        stopTimer();
         if (wasActive && onPlayStateChanged) onPlayStateChanged(index, false);
         if (onEjectRequested) onEjectRequested(index);
         repaint();
