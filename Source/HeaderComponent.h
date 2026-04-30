@@ -116,7 +116,6 @@ private:
 
     // Transport Buttons
     juce::TextButton playBtn { "PLAY" };
-    juce::TextButton stopBtn { "STOP" };
     juce::TextButton cueBtn  { "CUE" };
 
     // Loop

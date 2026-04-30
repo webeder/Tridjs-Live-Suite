@@ -10,6 +10,11 @@ TridjsLookAndFeel::TridjsLookAndFeel()
     setColour(juce::Slider::thumbColourId, juce::Colour(0xff00ffff)); // Vibrant Cyan
     setColour(juce::Slider::trackColourId, juce::Colour(0xff1e1e1e));
 
+    // Paleta para AlertWindow (Popups)
+    setColour(juce::AlertWindow::backgroundColourId, juce::Colour(0xff0a0a0a)); // Mais escuro que o normal
+    setColour(juce::AlertWindow::textColourId, juce::Colours::white);
+    setColour(juce::AlertWindow::outlineColourId, juce::Colours::cyan.withAlpha(0.5f));
+    
     setDefaultSansSerifTypefaceName("Inter");
 }
 

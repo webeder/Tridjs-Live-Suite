@@ -55,7 +55,7 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   juce::StringArray fxNames = {"Delay",  "Echo",  "Reverb",
                                "Flange", "Space", "Dub Echo"};
   for (int i = 0; i < fxNames.size(); ++i) {
-    auto slot = std::make_unique<FxSlot>(fxNames[i], i, i == 5);
+    auto slot = std::make_unique<FxSlot>(fxNames[i], i);
     slot->onFxToggled = [this](int idx, bool on) {
       if (onFxToggled)
         onFxToggled(idx, on);

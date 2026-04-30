@@ -10,17 +10,17 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     // Transport Buttons
     playBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff00ff55));
     playBtn.onClick = [this] {
-        // If CUE is set and we're stopped, play from CUE point
-        if (!waveformDisplay.isPlaying && waveformDisplay.cuePoint > 0.0) {
-            if (onSeek) onSeek(waveformDisplay.cuePoint);
+        if (waveformDisplay.isPlaying) {
+            if (onStop) onStop();
+        } else {
+            // If CUE is set and we're stopped, play from CUE point
+            if (waveformDisplay.cuePoint > 0.0) {
+                if (onSeek) onSeek(waveformDisplay.cuePoint);
+            }
+            if (onPlay) onPlay();
         }
-        if (onPlay) onPlay();
     };
     addAndMakeVisible(playBtn);
-
-    stopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff666666));
-    stopBtn.onClick = [this] { if (onStop) onStop(); };
-    addAndMakeVisible(stopBtn);
 
     ejectButton.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff553333));
     ejectButton.onClick = [this] {
@@ -120,8 +120,9 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     addAndMakeVisible (recordButton);
 
     recordDuration.setColour(juce::Label::textColourId, juce::Colours::white);
-    recordDuration.setFont(juce::Font("Consolas", 15.0f, juce::Font::plain));
+    recordDuration.setFont(juce::Font("Consolas", 18.0f, juce::Font::bold));
     recordDuration.setJustificationType(juce::Justification::centred);
+    recordDuration.setColour(juce::Label::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
     addAndMakeVisible(recordDuration);
 
     // Loop Setup
@@ -192,7 +193,8 @@ void HeaderComponent::timerCallback()
         int secs = totalSecs % 60;
         
         recordDuration.setText(juce::String::formatted("%02d:%02d:%02d", hours, mins, secs), juce::dontSendNotification);
-        recordDuration.setColour(juce::Label::textColourId, (juce::Time::getMillisecondCounter() % 1000 < 500) ? juce::Colours::red : juce::Colours::white);
+        // Time stays white as requested
+        recordDuration.setColour(juce::Label::textColourId, juce::Colours::white);
     }
 
     waveformDisplay.repaint();
@@ -209,6 +211,7 @@ void HeaderComponent::updateTransportInfo (double positionSeconds, double trackL
     
     playBtn.setColour(juce::TextButton::buttonColourId, 
         playing ? juce::Colour((juce::uint32)0xff00ff55) : juce::Colour((juce::uint32)0xff00aa44));
+    playBtn.setButtonText(playing ? "STOP" : "PLAY");
     repaint();
 }
 
@@ -272,30 +275,19 @@ HeaderComponent::WaveformDisplay::WaveformDisplay (juce::AudioThumbnail& thumb) 
     zoomOutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x33ffffff));
     zoomInBtn.onClick = [this] { setZoomLevel(zoomFactor + 0.5); };
     addAndMakeVisible(zoomInBtn);
-
-    bpmOverlay.setJustificationType(juce::Justification::right);
+    bpmOverlay.setJustificationType(juce::Justification::centred);
     bpmOverlay.setFont(juce::Font("Roboto", 24.0f, juce::Font::bold));
     bpmOverlay.setColour(juce::Label::textColourId, juce::Colours::cyan);
     bpmOverlay.setInterceptsMouseClicks(false, false);
+    bpmOverlay.setBorderSize(juce::BorderSize<int>(0));
     addAndMakeVisible(bpmOverlay);
 
-    timeOverlay.setJustificationType(juce::Justification::right);
+    timeOverlay.setJustificationType(juce::Justification::centred);
     timeOverlay.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
     timeOverlay.setColour(juce::Label::textColourId, juce::Colours::white);
     timeOverlay.setInterceptsMouseClicks(false, false);
+    timeOverlay.setBorderSize(juce::BorderSize<int>(0));
     addAndMakeVisible(timeOverlay);
-
-    deckLabel.setJustificationType(juce::Justification::left);
-    deckLabel.setFont(juce::Font("Roboto", 32.0f, juce::Font::bold));
-    deckLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    deckLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(deckLabel);
-
-    trackNameLabel.setJustificationType(juce::Justification::left);
-    trackNameLabel.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
-    trackNameLabel.setColour(juce::Label::textColourId, juce::Colours::green);
-    trackNameLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(trackNameLabel);
 }
 void HeaderComponent::WaveformDisplay::setLoopVisual(double start, double duration, bool active) {
     loopStart = start;
@@ -306,19 +298,26 @@ void HeaderComponent::WaveformDisplay::setLoopVisual(double start, double durati
 
 void HeaderComponent::WaveformDisplay::resized()
 {
-    auto area = getLocalBounds().reduced(10, 5);
+    auto area = getLocalBounds();
     
-    // Esquerda: Deck e Nome da Música
-    auto leftCol = area.removeFromLeft(area.getWidth() * 0.6f);
-    deckLabel.setBounds(leftCol.removeFromTop(40));
-    trackNameLabel.setBounds(leftCol.removeFromTop(25));
+    // Esquerda: A maior parte para o Waveform (94%)
+    auto leftCol = area.removeFromLeft((int)(getWidth() * 0.94f));
+    // Track name e DECK serão desenhados manualmente no paint()
 
-    // Direita: Botões e Tempo/BPM
+    // Direita: Botões e Tempo/BPM (Apenas 6%)
     auto rightCol = area;
-    auto btns = rightCol.removeFromTop(25);
-    zoomOutBtn.setBounds(btns.removeFromRight(25).reduced(1));
-    zoomInBtn.setBounds(btns.removeFromRight(25).reduced(1));
     
+    // Centralizando os botões no topo
+    auto btns = rightCol.removeFromTop(25);
+    int btnWidth = 18;
+    int totalBtnsWidth = btnWidth * 2;
+    int xOffset = (btns.getWidth() - totalBtnsWidth) / 2;
+    auto btnsArea = btns.reduced(xOffset, 0); // Isso centraliza o par de botões
+    
+    zoomOutBtn.setBounds(btnsArea.removeFromRight(btnWidth).reduced(1)); 
+    zoomInBtn.setBounds(btnsArea.removeFromRight(btnWidth).reduced(1));
+    
+    // Alinhamento centralizado no painel ultra estreito
     bpmOverlay.setBounds(rightCol.removeFromTop(30));
     timeOverlay.setBounds(rightCol.removeFromTop(25));
 }
@@ -342,11 +341,8 @@ void HeaderComponent::WaveformDisplay::updateOverlays(double bpm, double time, b
     int ms = (int)(std::abs(time - (int)time) * 100);
     juce::String timeStr = (time < 0 ? "-" : "") + juce::String::formatted("%02d:%02d.%02d", mins, secs, ms);
     timeOverlay.setText(timeStr, juce::dontSendNotification);
-
-    // Update Deck/Track name
-    trackNameLabel.setText(loadedTrackName.isEmpty() ? "EMPTY DECK" : (playing ? "PLAYING: " + loadedTrackName : "READY: " + loadedTrackName), juce::dontSendNotification);
-    trackNameLabel.setColour(juce::Label::textColourId, playing ? juce::Colours::green : juce::Colours::grey.withAlpha(0.6f));
 }
+
 
 void HeaderComponent::WaveformDisplay::setZoomLevel(double newZoom) {
     zoomFactor = juce::jlimit(1.0, 100.0, newZoom);
@@ -422,6 +418,9 @@ void HeaderComponent::WaveformDisplay::generateRgbWaveform (const juce::File& fi
 void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
 {
     auto bounds = getLocalBounds();
+    const float width = (float)getWidth();
+    const float height = (float)getHeight();
+
     g.fillAll(juce::Colour(0xff0f0f0f)); 
 
     if (isAnalyzing)
@@ -429,13 +428,10 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         g.setColour(juce::Colours::white.withAlpha(0.5f));
         g.setFont(14.0f);
         g.drawText("ANALISANDO...", bounds, juce::Justification::centred);
-        return;
     }
 
     if (loadedTrackName.isNotEmpty() && !spectralData.empty())
     {
-        const float width = (float)getWidth();
-        const float height = (float)getHeight();
         const float yCenter = height * 0.5f;
 
         double visibleDuration = (trackLength > 0) ? (trackLength / zoomFactor) : 10.0;
@@ -452,7 +448,7 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         const int pointsPerSec = 50;
         
         const float vGainL = 2.8f; 
-        const float vGainM = 4.1f; // Increased for better mid visibility
+        const float vGainM = 4.1f; 
         const float vGainH = 3.9f;
         
         const float zoomRatio = juce::jlimit(0.0f, 1.0f, (float)((zoomFactor - 1.0) / 10.0));
@@ -461,7 +457,8 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         const int step = (zoomFactor > 15.0) ? 2 : 1; 
         const float halfH = height * 0.45f;
 
-        for (int x = 0; x < getWidth(); x += step)
+        const int waveformLimit = (int)(width * 0.94f);
+        for (int x = 0; x < waveformLimit; x += step)
         {
             double timeAtX = startTime + ((double)x / width) * duration;
             if (timeAtX < 0 || timeAtX > trackLength) continue;
@@ -472,33 +469,45 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
             {
                 auto const& p = spectralData[(size_t)spectralIdx];
                 
-                float l = p.low * vGainL; 
-                float m = p.mid * vGainM;
-                float h = p.high * vGainH;
+                float r = p.low * vGainL;
+                float g_comp = p.mid * vGainM;
+                float b = p.high * vGainH;
+                
+                float maxComp = std::max({r, g_comp, b});
+                if (maxComp < 0.05f) continue;
+                
+                r = juce::jlimit(0.0f, 1.0f, r);
+                g_comp = juce::jlimit(0.0f, 1.0f, g_comp);
+                b = juce::jlimit(0.0f, 1.0f, b);
 
-                float maxAmp = std::max({l, m, h});
-                if (maxAmp < 0.05f) continue;
-
-                l = juce::jlimit(0.0f, 1.0f, l);
-                m = juce::jlimit(0.0f, 1.0f, m);
-                h = juce::jlimit(0.0f, 1.0f, h);
-
-                float totalAmp = juce::jlimit(0.0f, 1.0f, (l + m + h) * 0.5f);
+                float totalAmp = juce::jlimit(0.0f, 1.0f, (r + g_comp + b) * 0.5f);
                 float hh = totalAmp * halfH;
 
-                // Simple composite color - avoid complex RGBA if possible
-                juce::Colour c = juce::Colour::fromFloatRGBA(l, m, h * hiAlphaMult, 1.0f);
+                juce::Colour c = juce::Colour::fromFloatRGBA(r, g_comp, b * hiAlphaMult, 1.0f);
                 
                 g.setColour(c);
                 g.drawVerticalLine(x, yCenter - hh, yCenter + hh);
             }
         }
 
-        // CUE e Playhead
+        // --- Overlays Background (Right Side Panel) ---
+        float panelWidth = width * 0.06f;
+        auto bgRect = juce::Rectangle<float>(width - panelWidth, 0.0f, panelWidth, height);
+
+        g.setColour(juce::Colours::black);
+        g.fillRect(bgRect); 
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.drawVerticalLine((int)(width - panelWidth), 0.0f, height);
+
+        // --- CUE e Playhead ---
+        const float clipLimit = width * 0.94f;
+
         if (cuePoint >= startTime && cuePoint <= endTime) {
             auto cueX = ((cuePoint - startTime) / duration) * width;
-            g.setColour(juce::Colours::orange);
-            g.fillRect((float)cueX - 1.0f, 0.0f, 3.0f, height);
+            if (cueX < clipLimit) {
+                g.setColour(juce::Colours::orange);
+                g.fillRect((float)cueX - 1.0f, 0.0f, 3.0f, height);
+            }
         }
 
         auto playX = ((currentPos - startTime) / duration) * width;
@@ -509,22 +518,56 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
             if (lEnd > lStart) {
                 float lx1 = (float)(((lStart - startTime) / duration) * width);
                 float lx2 = (float)(((lEnd - startTime) / duration) * width);
-                g.setColour(juce::Colours::yellow.withAlpha(0.15f));
-                g.fillRect(lx1, 0.0f, lx2 - lx1, height);
-                g.setColour(juce::Colours::yellow.withAlpha(0.4f));
-                g.drawRect(lx1, 0.0f, lx2 - lx1, height, 1.0f);
+                
+                lx2 = std::min(lx2, clipLimit);
+                if (lx2 > lx1 && lx1 < clipLimit) {
+                    g.setColour(juce::Colours::yellow.withAlpha(0.4f));
+                    g.fillRect(lx1, 0.0f, lx2 - lx1, height);
+                    g.setColour(juce::Colours::yellow.withAlpha(0.8f));
+                    g.drawRect(lx1, 0.0f, lx2 - lx1, height, 2.0f);
+                }
             }
         }
 
-        g.setColour(juce::Colours::white);
-        g.fillRect((float)playX - 1.0f, 0.0f, 2.0f, height);
-
-        g.setColour(juce::Colours::white.withAlpha(0.8f));
-        g.setFont(juce::Font("Roboto", 14.0f, juce::Font::bold));
-        g.drawText(loadedTrackName, 10, 5, (int)width - 60, 20, juce::Justification::left);
+        if (playX < clipLimit) {
+            g.setColour(juce::Colours::white);
+            g.fillRect((float)playX - 1.0f, 0.0f, 2.0f, height);
+        }
     }
     else if (isDraggingOver) {
         g.fillAll(juce::Colours::cyan.withAlpha(0.2f));
+    }
+
+    // --- DECK identifier (Red square with 'A') ---
+    g.setColour(juce::Colours::red);
+    g.fillRect(10, 10, 26, 26);
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
+    g.drawText("A", 10, 10, 26, 26, juce::Justification::centred);
+
+    if (loadedTrackName.isEmpty()) {
+        // Draw DECK Label next to the 'A' square
+        g.setFont(juce::Font("Roboto", 22.0f, juce::Font::bold));
+        g.setColour(juce::Colours::black);
+        g.drawText("DECK", 43, 12, 100, 25, juce::Justification::left);
+        g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+        g.drawText("DECK", 42, 11, 100, 25, juce::Justification::left);
+    }
+    else {
+        // --- Track Name (Visible only when loaded, at the BOTTOM) ---
+        juce::String displayName = isPlaying ? "PLAYING: " + loadedTrackName : "READY: " + loadedTrackName;
+        g.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
+        
+        int tx = 15;
+        int ty = (int)height - 30; 
+        
+        // Shadow
+        g.setColour(juce::Colours::black.withAlpha(0.9f));
+        g.drawText(displayName, tx + 1, ty + 1, (int)width - 150, 25, juce::Justification::left);
+        g.drawText(displayName, tx + 2, ty + 2, (int)width - 150, 25, juce::Justification::left);
+        // Main Text
+        g.setColour(juce::Colours::white);
+        g.drawText(displayName, tx, ty, (int)width - 150, 25, juce::Justification::left);
     }
 }
 
@@ -559,17 +602,17 @@ void HeaderComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour ((juce::uint32)0xff252525));
     
-    // Desenhar o Dot do Record (Estilo imagem 2)
+    // Desenhar o Dot do Record (Horizontal)
     auto recBounds = recordButton.getBounds();
     float dotSize = 12.0f;
-    float dotX = (float)recBounds.getX() - 18.0f;
+    float dotX = (float)recBounds.getX() - 16.0f;
     float dotY = (float)recBounds.getCentreY() - (dotSize / 2.0f);
     
     if (isRecording) {
-        // Glow vermelho
-        g.setColour(juce::Colours::red.withAlpha(0.3f));
+        bool flash = (juce::Time::getMillisecondCounter() % 1000 < 500);
+        g.setColour(flash ? juce::Colours::red.withAlpha(0.4f) : juce::Colours::red.withAlpha(0.2f));
         g.fillEllipse(dotX - 4, dotY - 4, dotSize + 8, dotSize + 8);
-        g.setColour(juce::Colours::red);
+        g.setColour(flash ? juce::Colours::red : juce::Colours::red.withAlpha(0.6f));
         g.fillEllipse(dotX, dotY, dotSize, dotSize);
     } else {
         g.setColour(juce::Colours::white.withAlpha(0.1f));
@@ -602,11 +645,10 @@ void HeaderComponent::resized()
     volumeKnob.setBounds(volArea.removeFromTop(volArea.getHeight() - 20));
     volumeLabel.setBounds(volArea);
 
-    // Transport buttons: PLAY | STOP | CUE
-    auto transportArea = bottomArea.removeFromLeft(165);
+    // Transport buttons: PLAY/STOP | CUE
+    auto transportArea = bottomArea.removeFromLeft(110);
     auto btnH = transportArea.getHeight();
     playBtn.setBounds(transportArea.removeFromLeft(55).reduced(2).withHeight(btnH));
-    stopBtn.setBounds(transportArea.removeFromLeft(55).reduced(2).withHeight(btnH));
     cueBtn.setBounds(transportArea.removeFromLeft(55).reduced(2).withHeight(btnH));
 
     // VU Meter
@@ -619,15 +661,10 @@ void HeaderComponent::resized()
     gearBtn.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
 
     // Loop Controls (Compactos e juntos)
-    auto loopArea = bottomArea.removeFromLeft(280); // Increased to fit REC
+    auto loopArea = bottomArea.removeFromLeft(350); 
     autoLoopBtn.setBounds(loopArea.removeFromLeft(80).reduced(4, 10));
     
-    // Record block (Lado Beats)
-    auto recBlock = loopArea.removeFromLeft(100);
-    recordButton.setBounds(recBlock.removeFromTop(25).withTrimmedLeft(20));
-    recordDuration.setBounds(recBlock);
-    
-    auto adjArea = loopArea.reduced(2, 5);
+    auto adjArea = loopArea.removeFromLeft(100).reduced(2, 5);
     auto topAdj = adjArea.removeFromTop(20);
     loopLabel.setBounds(topAdj.removeFromLeft(35));
     loopSizeLabel.setBounds(topAdj);
@@ -635,6 +672,11 @@ void HeaderComponent::resized()
     auto btnRow = adjArea.removeFromTop(25);
     loopInBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
     loopOutBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
+
+    // Record block (Lado Beats - Horizontal)
+    auto recBlock = loopArea.reduced(2, 10);
+    recordButton.setBounds(recBlock.removeFromLeft(60).withTrimmedLeft(20));
+    recordDuration.setBounds(recBlock);
 }
 
 // ---------------------------------------------------------------

@@ -46,6 +46,10 @@ public:
     void startPadRecording (int padIndex);
     void stopPadRecording (int padIndex, std::function<void(juce::File)> onFinished);
 
+    // Master Output Recording
+    void startMasterRecording();
+    void stopMasterRecording (std::function<void(juce::File)> onFinished);
+
     // FX Controls (6 slots: 0=Delay, 1=Echo, 2=Reverb, 3=Flange, 4=Space, 5=DubEcho)
     void setFxEnabled (int fxIndex, bool enabled);
     void setFxAmount (int fxIndex, float amount);
@@ -180,12 +184,15 @@ private:
     // Helper to detect BPM (Basic peak detection)
     double detectBpm (const juce::File& file);
 
-    struct PadRecorder {
+    struct RecorderState {
         juce::CriticalSection lock;
         std::unique_ptr<juce::AudioFormatWriter> writer;
         juce::File file;
         std::atomic<bool> isRecording { false };
-    } padRecorder;
+    };
+    
+    RecorderState padRecorder;
+    RecorderState masterRecorder;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioCore)
 };

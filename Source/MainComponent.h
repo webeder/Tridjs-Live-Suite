@@ -72,6 +72,7 @@ public:
 private:
     void loadMidiMappingFromFile (const juce::File& file);
     void applyMidiAction(int rowIdx, float value);
+    void handleMasterRecordingFinalization(const juce::File& tempFile);
 
     TridjsLookAndFeel customTheme;
     AudioCore audioEngine;

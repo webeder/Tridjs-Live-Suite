@@ -267,6 +267,14 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
             }
         }
     }
+
+    // Capture Master Recording (Final output AFTER all processing)
+    if (masterRecorder.isRecording.load()) {
+        const juce::ScopedLock sl(masterRecorder.lock);
+        if (masterRecorder.writer != nullptr) {
+            masterRecorder.writer->writeFromAudioSampleBuffer(*mainBuffer, start, num);
+        }
+    }
 }
 
 void AudioCore::asyncExtractStems(const juce::File& file)
@@ -613,11 +621,12 @@ void AudioCore::setGlobalPitchRatio(double val)
     
     pitchValue = val;
     double speedFactor = 1.0 + (pitchValue * 0.06);
-    double ratio = 1.0 / speedFactor;
+    double ratio = speedFactor; // Higher ratio = more input samples consumed = faster
     
     mainTrackChannel->resampler->setResamplingRatio(ratio);
     for (auto& pc : padChannels) {
-        pc->resampler->setResamplingRatio(ratio);
+        if (pc && pc->resampler)
+            pc->resampler->setResamplingRatio(ratio);
     }
 }
 
@@ -757,4 +766,42 @@ bool AudioCore::isStemMuted(int stemIndex) const
     if (stemIndex >= 0 && stemIndex < NUM_STEMS)
         return stemMuted[stemIndex];
     return false;
+}
+void AudioCore::startMasterRecording()
+{
+    const juce::ScopedLock sl(masterRecorder.lock);
+    if (masterRecorder.isRecording.load()) return;
+
+    auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    masterRecorder.file = tempDir.getChildFile("temp_master_rec.wav");
+    
+    if (masterRecorder.file.existsAsFile())
+        masterRecorder.file.deleteFile();
+
+    auto* wavFormat = formatManager.findFormatForFileExtension("wav");
+    
+    if (wavFormat != nullptr) {
+        auto* writer = wavFormat->createWriterFor(
+            new juce::FileOutputStream(masterRecorder.file),
+            currentSampleRate, 2, 24, {}, 0);
+
+        if (writer != nullptr) {
+            masterRecorder.writer.reset(writer);
+            masterRecorder.isRecording = true;
+        }
+    }
+}
+
+void AudioCore::stopMasterRecording(std::function<void(juce::File)> onFinished)
+{
+    juce::File result;
+    {
+        const juce::ScopedLock sl(masterRecorder.lock);
+        masterRecorder.isRecording = false;
+        masterRecorder.writer.reset();
+        result = masterRecorder.file;
+    }
+    
+    if (onFinished)
+        onFinished(result);
 }

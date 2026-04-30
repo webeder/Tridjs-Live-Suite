@@ -4,6 +4,7 @@ MainComponent::MainComponent()
     : rgbManager (inputManager.getSerialManager())
 {
     setLookAndFeel (&customTheme);
+    juce::LookAndFeel::setDefaultLookAndFeel(&customTheme);
     
     // Initialize HandFree Layout
     handFreeComp = std::make_unique<HandFreeComponent>(audioEngine, inputManager, rgbManager, deviceManager);
@@ -251,6 +252,15 @@ MainComponent::MainComponent()
   handFreeComp->header.onEject = [this] { audioEngine.ejectMainTrack(); };
   handFreeComp->header.onLoopSet = [this](double start, double duration) { audioEngine.setMainTrackLoopRange(start, duration); };
   handFreeComp->header.onLoopEnabled = [this](bool enabled) { audioEngine.setMainTrackLoopEnabled(enabled); };
+  handFreeComp->header.onRecordToggled = [this](bool isRecording) {
+      if (isRecording) {
+          audioEngine.startMasterRecording();
+      } else {
+          audioEngine.stopMasterRecording([this](juce::File tempFile) {
+              handleMasterRecordingFinalization(tempFile);
+          });
+      }
+  };
 
   handFreeComp->stems.onStemMuteChanged = [this](int idx, bool muted) { audioEngine.setStemMuted(idx, muted); };
   handFreeComp->fxRack.onMidiDeviceIndexChanged = [this](int idx) {
@@ -699,4 +709,61 @@ void MainComponent::updatePitchFromExtern(float v) {
 void MainComponent::incrementPitch(float delta) {
     // Note: I might need to implement incrementPitch in HandFreeComponent too
     // or just use updatePitchFromExtern
+}
+
+void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile) {
+    if (!tempFile.existsAsFile()) return;
+
+    auto* aw = new juce::AlertWindow("Finalizar Gravação", "Digite o nome para a gravação da Master:", juce::MessageBoxIconType::NoIcon);
+    aw->addTextEditor("nameInput", "", "Nome do arquivo...");
+    aw->addButton("Salvar", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    aw->addButton("Cancelar", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    aw->enterModalState(true, juce::ModalCallbackFunction::create([this, aw, tempFile](int result) {
+        if (result == 1) {
+            juce::String fileName = aw->getTextEditorContents("nameInput").trim();
+            juce::Time now = juce::Time::getCurrentTime();
+            
+            if (fileName.isEmpty()) {
+                fileName = "rec_" + now.formatted("%Y%m%d_%H%M%S");
+            }
+            
+            if (!fileName.endsWithIgnoreCase(".wav")) fileName += ".wav";
+
+            // Pasta base especificada pelo usuário (%USERPROFILE%\Music\tridjs_lifeStudio\Recordings)
+            juce::File targetDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                    .getChildFile("tridjs_lifeStudio")
+                                    .getChildFile("Recordings");
+            
+            // Pasta dinâmica por data
+            juce::File dateFolder = targetDir.getChildFile(now.formatted("%Y-%m-%d"));
+            
+            if (!dateFolder.exists()) {
+                if (!dateFolder.createDirectory()) {
+                    // Fallback para pasta padrão de músicas se não houver permissão no caminho fixo
+                    dateFolder = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                    .getChildFile("Tridjs_Recordings")
+                                    .getChildFile(now.formatted("%Y-%m-%d"));
+                    dateFolder.createDirectory();
+                }
+            }
+
+            juce::File targetFile = dateFolder.getChildFile(fileName);
+            
+            // Evitar sobrescrever se o nome for duplicado
+            if (targetFile.existsAsFile()) {
+                 targetFile = dateFolder.getNonexistentChildFile(fileName.replace(".wav", ""), ".wav");
+            }
+
+            if (!tempFile.moveFileTo(targetFile)) {
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, 
+                    "Erro ao Salvar", "Não foi possível mover o arquivo para a pasta de destino.");
+            }
+        } else {
+            // Cancelado: Deletar arquivo temporário fisicamente
+            if (tempFile.existsAsFile())
+                tempFile.deleteFile();
+        }
+        delete aw;
+    }));
 }

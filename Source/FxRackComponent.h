@@ -187,8 +187,8 @@ public:
     class FxSlot : public juce::Component
     {
     public:
-    FxSlot(const juce::String& fxName, int slotIndex, bool isDubEcho = false)
-            : name(fxName.toUpperCase()), index(slotIndex), hasDoubleControl(isDubEcho)
+    FxSlot(const juce::String& fxName, int slotIndex)
+            : name(fxName.toUpperCase()), index(slotIndex)
         {
             // O botão invisível agora cobre o fundo para o clique de ativação
             toggleBtn.setButtonText("");
@@ -209,15 +209,6 @@ public:
                 if (onFxAmountChanged) onFxAmountChanged(index, (float)knob1.getValue());
             };
             addAndMakeVisible(knob1);
-
-            if (hasDoubleControl) {
-                knob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-                knob2.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-                knob2.setRange(0.0, 1.0, 0.01);
-                knob2.setValue(0.5);
-                knob2.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::orange);
-                addAndMakeVisible(knob2);
-            }
         }
 
         void updateUI(float amt, bool on) {
@@ -280,14 +271,7 @@ public:
             
             area.removeFromTop(40); // Espaço do nome
             auto knobArea = area.reduced(15);
-            
-            if (hasDoubleControl) {
-                auto left = knobArea.removeFromLeft(knobArea.getWidth() / 2);
-                knob1.setBounds(left.reduced(5));
-                knob2.setBounds(knobArea.reduced(5));
-            } else {
-                knob1.setBounds(knobArea);
-            }
+            knob1.setBounds(knobArea);
         }
         
         std::function<void(int, bool)> onFxToggled;
@@ -298,10 +282,8 @@ public:
     private:
         juce::String name;
         int index;
-        bool hasDoubleControl;
         juce::TextButton toggleBtn;
         juce::Slider knob1;
-        juce::Slider knob2;
         juce::String rgbLabel;
         juce::Colour rgbColor = juce::Colours::transparentBlack;
     };
