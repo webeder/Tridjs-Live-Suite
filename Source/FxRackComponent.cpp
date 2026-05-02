@@ -187,8 +187,7 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   midiLearnContent.addAndMakeVisible(mappingViewport);
 
   // Search Box
-  searchBox.setTextToShowWhenEmpty("Pesquisar controle...",
-                                   juce::Colours::grey);
+  searchBox.setTextToShowWhenEmpty("Pesquisar", juce::Colours::grey);
   searchBox.onTextChange = [this] {
     juce::String filter = searchBox.getText().toLowerCase();
     for (auto &row : midiRows) {
@@ -318,8 +317,9 @@ void FxRackComponent::resized() {
   // ===== LEARN TAB =====
   auto learnArea = midiLearnContent.getLocalBounds().reduced(10);
   auto learnTop = learnArea.removeFromTop(40);
-  saveMidiBtn.setBounds(learnTop.removeFromLeft(40).reduced(2));
-  openMidiBtn.setBounds(learnTop.removeFromLeft(40).reduced(2));
+  // Buttons on the right to leave more room for search
+  openMidiBtn.setBounds(learnTop.removeFromRight(40).reduced(2));
+  saveMidiBtn.setBounds(learnTop.removeFromRight(40).reduced(2));
   searchBox.setBounds(learnTop.reduced(2));
   mappingViewport.setBounds(learnArea);
 

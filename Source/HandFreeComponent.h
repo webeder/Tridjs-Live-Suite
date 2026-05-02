@@ -10,6 +10,48 @@
 #include "AudioCore.h"
 #include "InputManager.h"
 #include "RgbManager.h"
+#include "TrackDatabase.h"
+#include "AnalysisManager.h"
+#include "TrackBrowserComponent.h"
+
+class BottomPanelComponent : public juce::Component
+{
+public:
+    BottomPanelComponent() { setMouseCursor(juce::MouseCursor::PointingHandCursor); }
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(0xff121212));
+        g.fillRoundedRectangle(area, 5.0f);
+        g.setColour(juce::Colours::grey.withAlpha(0.3f));
+        g.drawRoundedRectangle(area, 5.0f, 1.0f);
+        float barW = 40.0f; float barH = 4.0f;
+        g.setColour(juce::Colours::grey.withAlpha(0.5f));
+        g.fillRoundedRectangle(area.getCentreX() - barW/2, 6.0f, barW, barH, 2.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.setFont(12.0f);
+        g.drawText("MUSIC BROWSER", area.withHeight(25), juce::Justification::centred);
+    }
+    void mouseDown(const juce::MouseEvent&) override { if (onClick) onClick(); }
+    
+    void setContent(juce::Component* content) { 
+        browserContainer.reset(content); 
+        if (browserContainer) addAndMakeVisible(browserContainer.get());
+        resized();
+    }
+    
+    void resized() override {
+        if (browserContainer) {
+            auto area = getLocalBounds();
+            area.removeFromTop(25); // Drag bar space
+            browserContainer->setBounds(area);
+        }
+    }
+
+    std::function<void()> onClick;
+
+private:
+    std::unique_ptr<juce::Component> browserContainer;
+};
 
 class HandFreeComponent : public juce::Component, private juce::Timer
 {
@@ -24,6 +66,10 @@ public:
     void resetPitch();
     void navegarParaAba(int tabIndex);
 
+    void setExpanded(bool expanded);
+    bool isExpanded() const { return panelExpanded; }
+    TrackDatabase& getTrackDatabase() { return trackDb; }
+
     // Callbacks ou métodos para expor funcionalidades ao MainComponent se necessário
     std::function<void()> onResetPitchRequested;
 
@@ -37,16 +83,25 @@ public:
     FxRackComponent fxRack;
     FooterComponent footer;
     SideBrowserComponent sideBrowser;
+    BottomPanelComponent bottomPanel;
+    
+    // Data & Analysis
+    TrackDatabase trackDb;
+    AnalysisManager analysisManager;
+    TrackBrowserComponent* browserPtr = nullptr;
     
     // Middle Pitch
     juce::Slider pitchSlider;
     juce::Label pitchLabel { {}, "PITCH" };
     juce::TextButton pitchValue { "0.0%" };
 private:
+    bool panelExpanded = false;
     float currentRackWidth = 35.0f;
     float targetRackWidth = 35.0f;
     float currentBrowserWidth = 35.0f;
     float targetBrowserWidth = 35.0f;
+    float currentBottomHeight = 25.0f;
+    float targetBottomHeight = 25.0f;
     void timerCallback() override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HandFreeComponent)

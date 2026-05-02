@@ -43,7 +43,21 @@ FetchContent_Declare(
     onnxruntime
     URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip
 )
-FetchContent_MakeAvailable(onnxruntime)
+
+# Fetch SQLite3 (Amalgamation)
+FetchContent_Declare(
+    sqlite3_source
+    URL https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
+)
+
+FetchContent_MakeAvailable(onnxruntime sqlite3_source)
+
+# Create a static library for SQLite3
+add_library(sqlite3 STATIC "${sqlite3_source_SOURCE_DIR}/sqlite3.c")
+target_include_directories(sqlite3 PUBLIC "${sqlite3_source_SOURCE_DIR}")
+if(MSVC)
+    target_compile_options(sqlite3 PRIVATE /W0) # Silence SQLite warnings on MSVC
+endif()
 
 # Adicionando o suporte oficial ao ASIO nativo do Windows
 set(ASIO_SDK_PATH "C:/SDKs/ASIOSDK" CACHE PATH "Caminho master do ASIO SDK")
@@ -97,6 +111,12 @@ target_sources(TridjsLiveSuite
         Source/InputManager.h
         Source/RgbManager.cpp
         Source/RgbManager.h
+        Source/TrackDatabase.cpp
+        Source/TrackDatabase.h
+        Source/AnalysisManager.cpp
+        Source/AnalysisManager.h
+        Source/TrackBrowserComponent.cpp
+        Source/TrackBrowserComponent.h
 )
 
 # Adicionando Include Directories das dependencias extraídas 
@@ -104,6 +124,7 @@ target_include_directories(TridjsLiveSuite PRIVATE
     ${stk_SOURCE_DIR}/include
     ${soundtouch_SOURCE_DIR}/include
     ${onnxruntime_SOURCE_DIR}/include
+    ${sqlite3_source_SOURCE_DIR}
 )
 
 # Compile options & modules
@@ -135,6 +156,7 @@ target_link_libraries(TridjsLiveSuite
         juce::juce_dsp
         
         # Link Custom Libs
+        sqlite3
         "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
         setupapi
 )

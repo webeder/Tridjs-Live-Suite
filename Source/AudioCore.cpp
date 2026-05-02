@@ -232,6 +232,7 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
         float mag = mainBuffer->getMagnitude(ch, start, num);
         if (mag > peak) peak = mag;
     }
+    currentPeakLevel.store(peak);
     // 6. XY Filter (Mola Suite)
     if (xyEnabled.load())
     {
@@ -450,7 +451,7 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
 }
 // -------------------------------------------------------------
 
-bool AudioCore::loadMainTrack (const juce::File& file)
+bool AudioCore::loadMainTrack (const juce::File& file, double bpm)
 {
     if (!file.existsAsFile()) return false;
     auto* reader = formatManager.createReaderFor (file);
@@ -460,7 +461,11 @@ bool AudioCore::loadMainTrack (const juce::File& file)
         mainTrackChannel->transport->setSource (newSource.get(), 0, nullptr, reader->sampleRate);
         mainTrackChannel->readerSource = std::move (newSource);
         
-        mainTrackBpm = detectBpm(file);
+        if (bpm > 0.0)
+            mainTrackBpm = bpm;
+        else
+            mainTrackBpm = detectBpm(file);
+
         thumbnail.setSource(new juce::FileInputSource(file));
         
         // Start background stem extraction
@@ -718,8 +723,9 @@ void AudioCore::startPadRecording (int padIndex)
     const juce::ScopedLock sl (padRecorder.lock);
     padRecorder.writer.reset(); // Close any existing
     
-    auto samplersDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
-                        .getParentDirectory().getChildFile("samplers");
+    auto samplersDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                        .getChildFile("tridjs_lifeStudio")
+                        .getChildFile("samplers");
     samplersDir.createDirectory();
     
     auto timeStr = juce::Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S");

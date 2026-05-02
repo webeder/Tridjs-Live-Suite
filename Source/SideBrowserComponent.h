@@ -4,7 +4,8 @@
 #include <functional>
 
 class SideBrowserComponent : public juce::Component,
-                             private juce::Button::Listener
+                             private juce::Button::Listener,
+                             private juce::Timer
 {
 public:
     SideBrowserComponent();
@@ -22,6 +23,7 @@ public:
 
 private:
     void buttonClicked (juce::Button* b) override;
+    void timerCallback() override;
 
     bool expanded = false; // Começa fechado por padrão (fina barra de 25px)
     juce::TextButton toggleBtn { ">" };

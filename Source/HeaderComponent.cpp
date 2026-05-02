@@ -726,24 +726,35 @@ void HeaderComponent::fileDragExit(const juce::StringArray&)
 
 bool HeaderComponent::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    return details.description.toString() == "AudioFileSelected";
+    juce::String desc = details.description.toString();
+    return desc == "AudioFileSelected" || juce::File::isAbsolutePath(desc);
 }
 
 void HeaderComponent::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
     waveformDisplay.isDraggingOver = false;
+    juce::File fileToLoad;
+
     if (auto* tree = dynamic_cast<juce::FileTreeComponent*>(details.sourceComponent.get()))
     {
-        auto selectedFile = tree->getSelectedFile();
-        if (selectedFile.existsAsFile())
-        {
-            waveformDisplay.loadedTrackName = selectedFile.getFileNameWithoutExtension();
-            waveformDisplay.isPlaying = false;
-            waveformDisplay.cuePoint = 0.0;
-            waveformDisplay.generateRgbWaveform(selectedFile);
-            if (onFileDropped) onFileDropped(selectedFile);
-        }
+        fileToLoad = tree->getSelectedFile();
     }
+    else
+    {
+        juce::String desc = details.description.toString();
+        if (juce::File::isAbsolutePath(desc))
+            fileToLoad = juce::File(desc);
+    }
+
+    if (fileToLoad.existsAsFile())
+    {
+        waveformDisplay.loadedTrackName = fileToLoad.getFileNameWithoutExtension();
+        waveformDisplay.isPlaying = false;
+        waveformDisplay.cuePoint = 0.0;
+        waveformDisplay.generateRgbWaveform(fileToLoad);
+        if (onFileDropped) onFileDropped(fileToLoad);
+    }
+    
     waveformDisplay.repaint();
 }
 

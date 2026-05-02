@@ -5,8 +5,13 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
       inputManager(input),
       rgbManager(rgb),
       header(engine.getThumbnail()),
-      fxRack(deviceManager)
+      fxRack(deviceManager),
+      analysisManager(trackDb)
 {
+    auto browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager);
+    browserPtr = browser.get();
+    bottomPanel.setContent(browser.release()); 
+    
     // 1. Setup the callbacks first
     fxRack.onExpandedChanged = [this](bool expanded) {
         resized(); // Just trigger layout, internal animation handles the rest
@@ -31,6 +36,19 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
     addAndMakeVisible(fxRack);
     addAndMakeVisible(footer);
     addAndMakeVisible(sideBrowser);
+    addAndMakeVisible(bottomPanel);
+
+    bottomPanel.onClick = [this] {
+        setExpanded(!isExpanded());
+        
+        if (isExpanded()) {
+            auto availableHeight = getHeight() - 150 - 40 - 50; 
+            targetBottomHeight = (float)availableHeight * 0.45f;
+        } else {
+            targetBottomHeight = 25.0f;
+        }
+        startTimerHz(60);
+    };
 
     // Pitch Components Setup
     pitchSlider.setName("PitchSlider");
@@ -91,6 +109,9 @@ void HandFreeComponent::resized()
     
     stems.setBounds(body.removeFromTop(50));
     
+    // Bottom panel and Pads Grid
+    bottomPanel.setBounds(body.removeFromBottom((int)currentBottomHeight).reduced(2, 0));
+    
     // Pitch slider on the right of pads
     auto pArea = body.removeFromRight(55).reduced(2, 20);
     pitchLabel.setBounds(pArea.removeFromTop(20));
@@ -133,9 +154,20 @@ void HandFreeComponent::timerCallback()
     if (browserMoving) currentBrowserWidth += diffBrowser * 0.35f;
     else currentBrowserWidth = targetBrowserWidth;
 
-    if (!browserMoving) {
+    float diffBottom = targetBottomHeight - currentBottomHeight;
+    bool bottomMoving = std::abs(diffBottom) > 0.5f;
+    if (bottomMoving) currentBottomHeight += diffBottom * 0.25f;
+    else currentBottomHeight = targetBottomHeight;
+
+    if (!browserMoving && !bottomMoving) {
         stopTimer();
     }
     
     resized();
+}
+
+void HandFreeComponent::setExpanded(bool expanded)
+{
+    panelExpanded = expanded;
+    repaint();
 }

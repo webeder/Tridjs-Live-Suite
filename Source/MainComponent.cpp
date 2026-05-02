@@ -248,7 +248,17 @@ MainComponent::MainComponent()
   handFreeComp->header.onSeek = [this](double pos) { audioEngine.seekMainTrack(pos); };
   handFreeComp->header.onMasterVolumeChanged = [this](float v) { audioEngine.setMasterVolume(v); };
   handFreeComp->header.onTrackVolumeChanged = [this](float v) { audioEngine.setTrackVolume(v); };
-  handFreeComp->header.onFileDropped = [this](const juce::File& file) { audioEngine.loadMainTrack(file); };
+  
+  auto loadTrackWithMetadata = [this](const juce::File& file) {
+      TrackDatabase::Track t;
+      if (handFreeComp->getTrackDatabase().getTrackByPath(file.getFullPathName(), t)) {
+          audioEngine.loadMainTrack(file, t.bpm);
+      } else {
+          audioEngine.loadMainTrack(file);
+      }
+  };
+
+  handFreeComp->header.onFileDropped = loadTrackWithMetadata;
   handFreeComp->header.onEject = [this] { audioEngine.ejectMainTrack(); };
   handFreeComp->header.onLoopSet = [this](double start, double duration) { audioEngine.setMainTrackLoopRange(start, duration); };
   handFreeComp->header.onLoopEnabled = [this](bool enabled) { audioEngine.setMainTrackLoopEnabled(enabled); };
@@ -273,6 +283,10 @@ MainComponent::MainComponent()
       rgbManager.setMidiOutput(mode == InputManager::InputMode::MIDI);
   };
   handFreeComp->fxRack.onSerialPortChanged = [this](const juce::String& port) { inputManager.openSerialPort(port); };
+  
+  if (handFreeComp->browserPtr != nullptr) {
+      handFreeComp->browserPtr->onTrackDoubleClicked = loadTrackWithMetadata;
+  }
 
   setAudioChannels (2, 2);
   startTimer(50);

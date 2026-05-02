@@ -21,7 +21,7 @@ public:
     bool loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop = false);
     
     // Controles do Deck Principal
-    bool loadMainTrack (const juce::File& file);
+    bool loadMainTrack (const juce::File& file, double bpm = 0.0);
     void playMainTrack();
     void stopMainTrack();
     void seekMainTrack (double positionSeconds);

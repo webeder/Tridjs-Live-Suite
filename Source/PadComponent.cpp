@@ -205,16 +205,27 @@ void PadComponent::fileDragExit (const juce::StringArray& files) { isDraggingOve
 
 bool PadComponent::isInterestedInDragSource (const juce::DragAndDropTarget::SourceDetails& details) 
 { 
-    return details.description.toString() == "AudioFileSelected"; 
+    juce::String desc = details.description.toString();
+    return desc == "AudioFileSelected" || juce::File::isAbsolutePath(desc);
 }
+
 void PadComponent::itemDropped (const juce::DragAndDropTarget::SourceDetails& details) 
 { 
+    juce::File fileToLoad;
+
     if (auto* tree = dynamic_cast<juce::FileTreeComponent*>(details.sourceComponent.get()))
     {
-        auto file = tree->getSelectedFile();
-        if (file.existsAsFile() && onFileDropped)
-            onFileDropped(index, file);
+        fileToLoad = tree->getSelectedFile();
     }
+    else
+    {
+        juce::String desc = details.description.toString();
+        if (juce::File::isAbsolutePath(desc))
+            fileToLoad = juce::File(desc);
+    }
+
+    if (fileToLoad.existsAsFile() && onFileDropped)
+        onFileDropped(index, fileToLoad);
 }
 void PadComponent::itemDragEnter (const juce::DragAndDropTarget::SourceDetails& details) { isDraggingOver = true; repaint(); }
 void PadComponent::itemDragExit (const juce::DragAndDropTarget::SourceDetails& details) { isDraggingOver = false; repaint(); }

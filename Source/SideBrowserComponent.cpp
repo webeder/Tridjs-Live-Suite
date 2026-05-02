@@ -18,15 +18,32 @@ SideBrowserComponent::SideBrowserComponent()
 
     // Carrega a raiz do disco C: para evitar a lista vazia
     directoryList.setDirectory (juce::File("C:\\"), true, true);
-
-    // Permite que o FileTree dispare eventos de "Drag" para arquivos selecionados nele
-    fileTree.setDragAndDropDescription("AudioFileSelected");
+    
+    startTimer (300); // Atualiza a descrição de drag a cada 300ms
 }
 
 SideBrowserComponent::~SideBrowserComponent()
 {
+    stopTimer();
     toggleBtn.removeListener (this);
     thread.stopThread (2000);
+}
+
+void SideBrowserComponent::timerCallback()
+{
+    if (! expanded) return;
+    
+    juce::StringArray paths;
+    for (int i = 0; i < fileTree.getNumSelectedFiles(); ++i)
+    {
+        auto f = fileTree.getSelectedFile(i);
+        if (f.exists())
+            paths.add (f.getFullPathName());
+    }
+    
+    juce::String desc = paths.joinIntoString ("|");
+    if (fileTree.getDragAndDropDescription() != desc)
+        fileTree.setDragAndDropDescription (desc);
 }
 
 void SideBrowserComponent::buttonClicked (juce::Button* b)
