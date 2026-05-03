@@ -77,6 +77,13 @@ juce_add_gui_app(TridjsLiveSuite
     ICON_BIG "C:/TridjsMIDI/icone.png"
     ICON_SMALL "C:/TridjsMIDI/icone.png"
 )
+
+# Embed binary assets (Splash, Icons, etc.)
+juce_add_binary_data(TridjsAssets
+    SOURCES
+        "C:/TridjsMIDI/splash2.png"
+)
+
 juce_generate_juce_header(TridjsLiveSuite)
 
 # Sources
@@ -156,6 +163,7 @@ target_link_libraries(TridjsLiveSuite
         juce::juce_dsp
         
         # Link Custom Libs
+        TridjsAssets
         sqlite3
         "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
         setupapi

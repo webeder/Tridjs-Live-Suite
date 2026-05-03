@@ -14,6 +14,23 @@ public:
         audioCore.getThumbnail(deckIdx).addChangeListener(this);
         setBufferedToImage(true);
         startTimer(16); // ~60 FPS
+        
+        addAndMakeVisible(zoomInBtn);
+        addAndMakeVisible(zoomOutBtn);
+        
+        zoomInBtn.setButtonText("+");
+        zoomOutBtn.setButtonText("-");
+        
+        auto setupZoomBtn = [](juce::TextButton& b) {
+            b.setColour(juce::TextButton::buttonColourId, juce::Colours::black.withAlpha(0.6f));
+            b.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+            b.setConnectedEdges(juce::Button::ConnectedOnBottom | juce::Button::ConnectedOnTop);
+        };
+        setupZoomBtn(zoomInBtn);
+        setupZoomBtn(zoomOutBtn);
+        
+        zoomInBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.8); repaint(); };
+        zoomOutBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.25); repaint(); };
     }
     ~SimpleWaveform() override { audioCore.getThumbnail(deckIdx).removeChangeListener(this); }
     
@@ -33,7 +50,7 @@ public:
         double totalLen = audioCore.getDeckLength(deckIdx);
         if (totalLen > 0.0) {
             double pos = audioCore.getDeckPosition(deckIdx);
-            double visibleSeconds = 8.0;
+            double visibleSeconds = zoomLevel;
             float centerWeight = 0.5f;
             double startTime = pos - (visibleSeconds * centerWeight);
             
@@ -52,7 +69,7 @@ public:
             int deltaX = e.x - lastMouseX;
             lastMouseX = e.x;
             
-            double visibleSeconds = 8.0; // Show 8 seconds of audio
+            double visibleSeconds = zoomLevel; // Use dynamic zoom level
             double secondsPerPixel = visibleSeconds / (double)getWidth();
             double deltaSeconds = (double)deltaX * secondsPerPixel;
             
@@ -72,6 +89,12 @@ public:
     void mouseUp(const juce::MouseEvent&) override {
         isDragging = false;
     }
+
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override {
+        if (wheel.deltaY > 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.9);
+        else if (wheel.deltaY < 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.1);
+        repaint();
+    }
     
     void paint(juce::Graphics& g) override {
         auto area = getLocalBounds();
@@ -85,7 +108,7 @@ public:
         if (totalLen > 0.0) {
             float centerWeight = 0.5f;
             float centerX = area.getWidth() * centerWeight;
-            double visibleSeconds = 8.0;
+            double visibleSeconds = zoomLevel;
             double startTime = pos - (visibleSeconds * centerWeight);
             double endTime = startTime + visibleSeconds;
 
@@ -141,11 +164,20 @@ public:
         juce::MessageManager::callAsync([this] { repaint(); }); 
     }
     void timerCallback() override { repaint(); }
+    
+    void resized() override {
+        auto area = getLocalBounds();
+        auto btnArea = area.removeFromRight(25).withSizeKeepingCentre(22, 50);
+        zoomInBtn.setBounds(btnArea.removeFromTop(25).reduced(1));
+        zoomOutBtn.setBounds(btnArea.reduced(1));
+    }
 private:
     AudioCore& audioCore;
     int deckIdx;
     int lastMouseX = 0;
     bool isDragging = false;
+    double zoomLevel = 8.0;
+    juce::TextButton zoomInBtn, zoomOutBtn;
 };
 
 class VUMeter : public juce::Component, private juce::Timer {
@@ -226,7 +258,14 @@ public:
         inBtn.setBounds(area.removeFromLeft(btnW).reduced(1, 4)); outBtn.setBounds(area.reduced(1, 4));
     }
 public:
-    void setBeats(int b) { beats.setText(juce::String(b) + " BEATS", juce::dontSendNotification); }
+    void setBeats(double b) { 
+        if (b < 1.0) {
+            int denom = (int)(1.0 / b + 0.5);
+            beats.setText("1/" + juce::String(denom) + " BEAT", juce::dontSendNotification);
+        } else {
+            beats.setText(juce::String((int)b) + " BEATS", juce::dontSendNotification);
+        }
+    }
     std::function<void()> onInPressed;
     std::function<void()> onOutPressed;
     std::function<void()> onAutoPressed;
@@ -297,8 +336,8 @@ public:
             double bpm = audioCore.getDeckBpm(deckIdx);
             if (bpm <= 0) bpm = 120.0;
             
-            int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
-            int numBeats = beatOptions[currentBeatIdx];
+            double beatOptions[] = { 0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32 };
+            double numBeats = beatOptions[currentBeatIdx];
             double duration = (60.0 / bpm) * numBeats;
             
             double startPos = audioCore.isDeckLoopEnabled(deckIdx) ? 
@@ -308,61 +347,31 @@ public:
             audioCore.setDeckLoopRange(deckIdx, startPos, duration);
             if (activate) audioCore.setDeckLoopEnabled(deckIdx, true);
             
-            // Mark CUE at loop start (mandatory)
             audioCore.setDeckCuePoint(deckIdx, startPos);
             loopControls.setBeats(numBeats);
         };
 
         loopControls.onInPressed = [this, updateLoopWithCurrentBeats] {
-            if (audioCore.isDeckLoopEnabled(deckIdx)) {
-                // Divisor Mode: Divide by 2
-                int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
-                int currentBeats = beatOptions[currentBeatIdx];
-                if (currentBeats > 1) {
-                    currentBeatIdx--;
-                    updateLoopWithCurrentBeats(true);
-                } else {
-                    // Release loop if at minimum or as requested
-                    audioCore.setDeckLoopEnabled(deckIdx, false);
-                }
-            } else {
-                // Manual IN: Define entry point + update CUE
-                double pos = audioCore.getDeckPosition(deckIdx);
-                loopInPoint = pos;
-                audioCore.setDeckCuePoint(deckIdx, pos);
-                loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+            if (currentBeatIdx > 0) {
+                currentBeatIdx--;
+                updateLoopWithCurrentBeats(true);
             }
         };
 
         loopControls.onOutPressed = [this, updateLoopWithCurrentBeats] {
-            if (audioCore.isDeckLoopEnabled(deckIdx)) {
-                // Multiplier Mode: Multiply by 2
-                int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
-                int currentBeats = beatOptions[currentBeatIdx];
-                if (currentBeats < 32) {
-                    currentBeatIdx++;
-                    updateLoopWithCurrentBeats(true);
-                }
-            } else {
-                // Manual OUT: Close and activate loop immediately
-                double currentPos = audioCore.getDeckPosition(deckIdx);
-                if (currentPos > loopInPoint) {
-                    audioCore.setDeckLoopRange(deckIdx, loopInPoint, currentPos - loopInPoint);
-                    audioCore.setDeckLoopEnabled(deckIdx, true);
-                    loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
-                }
+            if (currentBeatIdx < 10) { // 0.03125 to 32 is 11 options (0 to 10)
+                currentBeatIdx++;
+                updateLoopWithCurrentBeats(true);
             }
         };
 
         loopControls.onAutoPressed = [this, updateLoopWithCurrentBeats] {
             bool isLooping = audioCore.isDeckLoopEnabled(deckIdx);
             if (isLooping) {
-                // Release loop
                 audioCore.setDeckLoopEnabled(deckIdx, false);
-                loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
             } else {
-                // Start 4-beat loop from current position
-                currentBeatIdx = 2; // Reset to 4 beats
+                currentBeatIdx = 7; // Start at 4 beats (Index 7: 0.03,0.06,0.12,0.25,0.5,1,2,4...)
+                // Wait, let's recount: 0:1/32, 1:1/16, 2:1/8, 3:1/4, 4:1/2, 5:1, 6:2, 7:4, 8:8, 9:16, 10:32
                 updateLoopWithCurrentBeats(true);
             }
         };
@@ -414,7 +423,7 @@ private:
     }
     AudioCore& audioCore; int deckIdx; bool leftSide; juce::Label deckLabel, bpmLabel; juce::TextButton badge; JogWheel jog; VUMeter vu; juce::Slider pitchSlider; juce::TextButton playBtn, cueBtn, syncBtn, revBtn, ejectBtn; LoopControlGroup loopControls;
     double loopInPoint = 0.0;
-    int currentBeatIdx = 2; // Default 4 beats
+    int currentBeatIdx = 7; // Default 4 beats (Index 7)
 };
 
 class MixerCenterSection : public juce::Component {
@@ -749,7 +758,7 @@ private:
 
                 addAndMakeVisible(label); 
                 label.setText(name, juce::dontSendNotification);
-                label.setFont(juce::Font(10.0f, juce::Font::bold));
+                label.setFont(juce::Font(18.0f, juce::Font::bold));
                 label.setJustificationType(juce::Justification::centred);
                 label.setColour(juce::Label::textColourId, juce::Colours::grey.withAlpha(0.6f));
             }
@@ -757,9 +766,8 @@ private:
 
             void resized() override {
                 auto area = getLocalBounds();
-                // Layout from image: Knob top, Label bottom
-                label.setBounds(area.removeFromBottom(20));
-                knob.setBounds(area.reduced(2));
+                label.setBounds(area.removeFromBottom(28));
+                knob.setBounds(area.reduced(22));
             }
         };
 

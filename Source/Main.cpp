@@ -1,4 +1,5 @@
 #include <JuceHeader.h>
+#include <BinaryData.h>
 #include "MainComponent.h"
 
 class TridjsLiveSuiteApplication  : public juce::JUCEApplication
@@ -12,7 +13,27 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        // Explicitly decode the PNG from memory
+        juce::MemoryInputStream stream (BinaryData::splash2_png, BinaryData::splash2_pngSize, false);
+        juce::PNGImageFormat pngFormat;
+        juce::Image logo = pngFormat.decodeImage(stream);
+        
+        // If the image failed to decode, create a fallback image
+        if (!logo.isValid()) {
+             logo = juce::Image(juce::Image::RGB, 700, 327, true);
+             juce::Graphics g(logo);
+             g.fillAll(juce::Colours::black);
+             g.setColour(juce::Colours::red);
+             g.drawText("ERRO: splash2.png invalido no BinaryData", logo.getBounds(), juce::Justification::centred);
+        }
+
+        // Show splash screen
+        splash.reset(new juce::SplashScreen(getApplicationName(), logo, true));
+        
         mainWindow.reset (new MainWindow (getApplicationName()));
+        
+        if (splash)
+            splash->deleteAfterDelay(juce::RelativeTime::seconds(3.0), false);
     }
 
     void shutdown() override
@@ -40,7 +61,7 @@ public:
             setFullScreen (true);
            #else
             setResizable (true, true);
-            centreWithSize (getWidth(), getHeight());
+            setFullScreen (true);
            #endif
 
             setVisible (true);
@@ -72,6 +93,7 @@ public:
 
 private:
     std::unique_ptr<MainWindow> mainWindow;
+    std::unique_ptr<juce::SplashScreen> splash;
 };
 
 START_JUCE_APPLICATION (TridjsLiveSuiteApplication)

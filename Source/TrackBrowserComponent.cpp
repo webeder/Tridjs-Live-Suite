@@ -24,7 +24,11 @@ TrackBrowserComponent::TrackBrowserComponent(TrackDatabase& db, AnalysisManager&
     
     addAndMakeVisible(searchBox);
     searchBox.setTextToShowWhenEmpty("SEARCH TRACKS...", juce::Colours::grey);
-    searchBox.onTextChange = [this] { refresh(); };
+    searchBox.onTextChange = [this] { 
+        if (currentView == ViewType::Collection) loadCollection();
+        else if (currentView == ViewType::Playlist) loadPlaylist(activePlaylistId);
+        else refresh(); // Folders handle filtering in refresh or paintRow
+    };
     searchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff121212));
     searchBox.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
 
@@ -83,6 +87,15 @@ void TrackBrowserComponent::loadPlaylist(int playlistId)
     activePlaylistId = playlistId;
     tracks.clear();
     database.getTracksInPlaylist(playlistId, tracks);
+    
+    // Filter results if search is active
+    juce::String filter = searchBox.getText().trim().toLowerCase();
+    if (filter.isNotEmpty()) {
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(), [&](const TrackDatabase::Track& t) {
+            return !t.name.toLowerCase().contains(filter) && !t.artist.toLowerCase().contains(filter);
+        }), tracks.end());
+    }
+
     refresh();
     updateTitle();
 }
@@ -105,6 +118,15 @@ void TrackBrowserComponent::loadFolder(const juce::File& folder, bool recursive)
             tracks.push_back(t);
         }
     }
+
+    // Filter results if search is active
+    juce::String filter = searchBox.getText().trim().toLowerCase();
+    if (filter.isNotEmpty()) {
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(), [&](const TrackDatabase::Track& t) {
+            return !t.name.toLowerCase().contains(filter) && !t.artist.toLowerCase().contains(filter);
+        }), tracks.end());
+    }
+
     refresh();
     updateTitle();
 }

@@ -7,11 +7,15 @@
 #include <thread>
 #include <onnxruntime_cxx_api.h>
 
+class TrackDatabase;
+
 class AudioCore
 {
 public:
     AudioCore();
     ~AudioCore();
+
+    void setDatabase (TrackDatabase* db) { trackDb = db; }
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate);
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill);
@@ -179,6 +183,7 @@ private:
     juce::String deckAName, deckBName, deckHName;
     int masterDeckIdx = -1;
     bool syncEnabled[2] = { false, false };
+    TrackDatabase* trackDb = nullptr;
     
     void handleSyncLogic();
     

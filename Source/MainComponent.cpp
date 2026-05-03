@@ -7,6 +7,7 @@ MainComponent::MainComponent()
     juce::LookAndFeel::setDefaultLookAndFeel(&customTheme);
     
     // Initialize Data
+    audioEngine.setDatabase(&trackDb);
     browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager);
 
     // Initialize HandFree Layout

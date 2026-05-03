@@ -1,4 +1,5 @@
 #include "AudioCore.h"
+#include "TrackDatabase.h"
 #include <cmath>
 
 AudioCore::AudioCore()
@@ -460,8 +461,16 @@ bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
         deckAChannel->transport->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
         deckAChannel->readerSource = std::move(newSource);
         deckAName = file.getFileNameWithoutExtension();
-        if (bpm > 0.0) deckABpm = bpm;
-        else deckABpm = detectBpm(file);
+        
+        if (bpm <= 0.0 && trackDb != nullptr) {
+            TrackDatabase::Track t;
+            if (trackDb->getTrackByPath(file.getFullPathName(), t)) {
+                bpm = t.bpm;
+            }
+        }
+        if (bpm <= 0.0) bpm = 120.0;
+        deckABpm = bpm;
+        
         mainTrackBpm = deckABpm;
         thumbnail.setSource(new juce::FileInputSource(file));
         asyncExtractStems(file);
@@ -489,8 +498,16 @@ bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
         deckBChannel->transport->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
         deckBChannel->readerSource = std::move(newSource);
         deckBName = file.getFileNameWithoutExtension();
-        if (bpm > 0.0) deckBBpm = bpm;
-        else deckBBpm = detectBpm(file);
+        
+        if (bpm <= 0.0 && trackDb != nullptr) {
+            TrackDatabase::Track t;
+            if (trackDb->getTrackByPath(file.getFullPathName(), t)) {
+                bpm = t.bpm;
+            }
+        }
+        if (bpm <= 0.0) bpm = 120.0;
+        deckBBpm = bpm;
+        
         thumbnailB.setSource(new juce::FileInputSource(file));
         return true;
     }
