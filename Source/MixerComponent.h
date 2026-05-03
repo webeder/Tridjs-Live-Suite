@@ -1,0 +1,1000 @@
+#pragma once
+#include <JuceHeader.h>
+#include "AudioCore.h"
+#include "TrackBrowserComponent.h"
+
+// --- Helper Components ---
+
+class SimpleWaveform : public juce::Component, 
+                      public juce::FileDragAndDropTarget,
+                      private juce::ChangeListener, 
+                      private juce::Timer {
+public:
+    SimpleWaveform(AudioCore& ac, int idx) : audioCore(ac), deckIdx(idx) {
+        audioCore.getThumbnail(deckIdx).addChangeListener(this);
+        setBufferedToImage(true);
+        startTimer(16); // ~60 FPS
+    }
+    ~SimpleWaveform() override { audioCore.getThumbnail(deckIdx).removeChangeListener(this); }
+    
+    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
+    void filesDropped(const juce::StringArray& files, int, int) override {
+        if (files.size() > 0) {
+            bool success = (deckIdx == 0) ? audioCore.loadDeckA(juce::File(files[0])) : audioCore.loadDeckB(juce::File(files[0]));
+            if (success) repaint();
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        lastMouseX = e.x;
+        isDragging = true;
+        
+        // Click to Seek
+        double totalLen = audioCore.getDeckLength(deckIdx);
+        if (totalLen > 0.0) {
+            double pos = audioCore.getDeckPosition(deckIdx);
+            double visibleSeconds = 8.0;
+            float centerWeight = 0.5f;
+            double startTime = pos - (visibleSeconds * centerWeight);
+            
+            double clickTime = startTime + ((double)e.x / getWidth()) * visibleSeconds;
+            if (deckIdx == 0) audioCore.seekDeckA(clickTime);
+            else if (deckIdx == 1) audioCore.seekDeckB(clickTime);
+            else audioCore.seekHandsFreeDeck(clickTime);
+            
+            // Update lastMouseX to current so drag starts from here
+            lastMouseX = e.x;
+        }
+    }
+
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if (isDragging) {
+            int deltaX = e.x - lastMouseX;
+            lastMouseX = e.x;
+            
+            double visibleSeconds = 8.0; // Show 8 seconds of audio
+            double secondsPerPixel = visibleSeconds / (double)getWidth();
+            double deltaSeconds = (double)deltaX * secondsPerPixel;
+            
+            double currentPos = audioCore.getDeckPosition(deckIdx);
+            double newPos = juce::jlimit(0.0, audioCore.getDeckLength(deckIdx), currentPos - deltaSeconds);
+            
+            if (deckIdx == 0) audioCore.seekDeckA(newPos);
+            else audioCore.seekDeckB(newPos);
+            
+            if (!audioCore.isDeckPlaying(deckIdx)) {
+                audioCore.setDeckCuePoint(deckIdx, newPos);
+            }
+            repaint();
+        }
+    }
+
+    void mouseUp(const juce::MouseEvent&) override {
+        isDragging = false;
+    }
+    
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds();
+        g.setColour(juce::Colour(0xff0a0a0a));
+        g.fillRoundedRectangle(area.toFloat(), 4.0f);
+
+        auto& thumb = audioCore.getThumbnail(deckIdx);
+        double totalLen = audioCore.getDeckLength(deckIdx);
+        double pos = audioCore.getDeckPosition(deckIdx);
+        
+        if (totalLen > 0.0) {
+            float centerWeight = 0.5f;
+            float centerX = area.getWidth() * centerWeight;
+            double visibleSeconds = 8.0;
+            double startTime = pos - (visibleSeconds * centerWeight);
+            double endTime = startTime + visibleSeconds;
+
+            // 1. Draw Moving Grid Lines
+            double bpm = audioCore.getDeckBpm(deckIdx);
+            if (bpm > 0) {
+                double beatDuration = 60.0 / bpm;
+                double firstBeat = std::floor(startTime / beatDuration) * beatDuration;
+                g.setColour(juce::Colours::white.withAlpha(0.12f));
+                for (double t = firstBeat; t < endTime; t += beatDuration) {
+                    float gx = (float)((t - startTime) / visibleSeconds) * area.getWidth();
+                    g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                }
+            }
+
+            // 2. Draw Waveform
+            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.7f) : juce::Colours::tomato.withAlpha(0.7f));
+            thumb.drawChannels(g, area.reduced(0, 5), startTime, endTime, 1.0f);
+
+            // 3. Draw Loop Area in Yellow
+            if (audioCore.isDeckLoopEnabled(deckIdx)) {
+                double loopStart = audioCore.getDeckLoopStart(deckIdx);
+                double loopLen = audioCore.getDeckLoopLength(deckIdx);
+                double loopEnd = loopStart + loopLen;
+                
+                if (loopEnd > startTime && loopStart < endTime) {
+                    float lx = (float)((std::max(loopStart, startTime) - startTime) / visibleSeconds) * area.getWidth();
+                    float rx = (float)((std::min(loopEnd, endTime) - startTime) / visibleSeconds) * area.getWidth();
+                    g.setColour(juce::Colours::yellow.withAlpha(0.35f));
+                    g.fillRect(lx, 0.0f, rx - lx, (float)area.getHeight());
+                    g.setColour(juce::Colours::yellow.withAlpha(0.6f));
+                    g.drawVerticalLine((int)lx, 0.0f, (float)area.getHeight());
+                    g.drawVerticalLine((int)rx, 0.0f, (float)area.getHeight());
+                }
+            }
+            
+
+            // 5. CUE Point
+            double cue = audioCore.getDeckCuePoint(deckIdx);
+            if (cue >= startTime && cue <= endTime) {
+                float cx = (float)((cue - startTime) / visibleSeconds) * area.getWidth();
+                g.setColour(juce::Colours::orange);
+                g.fillRect(cx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
+            }
+        } else {
+            g.setColour(juce::Colours::grey.withAlpha(0.2f));
+            g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
+            g.setFont(14.0f);
+            g.drawText("DRAG TRACK HERE", area, juce::Justification::centred);
+        }
+    }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override { 
+        juce::MessageManager::callAsync([this] { repaint(); }); 
+    }
+    void timerCallback() override { repaint(); }
+private:
+    AudioCore& audioCore;
+    int deckIdx;
+    int lastMouseX = 0;
+    bool isDragging = false;
+};
+
+class VUMeter : public juce::Component, private juce::Timer {
+public:
+    VUMeter(AudioCore& ac, int idx) : audioCore(ac), deckIdx(idx) { startTimer(30); }
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().reduced(1);
+        g.setColour(juce::Colours::black);
+        g.fillRect(area);
+        float level = audioCore.getDeckPeakLevel(deckIdx);
+        int h = (int)(area.getHeight() * level);
+        auto levelArea = area.withTop(area.getBottom() - h);
+        g.setGradientFill(juce::ColourGradient(juce::Colours::green, 0, (float)area.getBottom(), juce::Colours::red, 0, (float)area.getY(), false));
+        g.fillRect(levelArea);
+    }
+private:
+    void timerCallback() override { repaint(); }
+    AudioCore& audioCore;
+    int deckIdx;
+};
+
+class JogWheel : public juce::Component, private juce::Timer {
+public:
+    JogWheel(AudioCore& ac, int idx, juce::Colour accent, bool showRemaining) 
+        : audioCore(ac), deckIdx(idx), accentColour(accent), remainingMode(showRemaining) { startTimer(16); }
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().reduced(2).toFloat();
+        float diameter = std::min(area.getWidth(), area.getHeight());
+        auto circleArea = area.withSizeKeepingCentre(diameter, diameter);
+        float radius = diameter / 2.0f;
+        auto center = circleArea.getCentre();
+        g.setColour(juce::Colour(0xff1a1a1a)); g.fillEllipse(circleArea);
+        double pos = audioCore.getDeckPosition(deckIdx);
+        double duration = audioCore.getDeckLength(deckIdx);
+        if (duration > 0) {
+            float angle = (float)(pos / duration) * juce::MathConstants<float>::twoPi;
+            juce::Path p; p.addCentredArc(center.x, center.y, radius - 4, radius - 4, 0, 0, angle, true);
+            g.setColour(accentColour); g.strokePath(p, juce::PathStrokeType(4.0f));
+        }
+        g.setColour(juce::Colour(0xff050505));
+        g.fillEllipse(center.x - radius * 0.7f, center.y - radius * 0.7f, radius * 1.4f, radius * 1.4f);
+        double displayTime = remainingMode ? std::max(0.0, duration - pos) : pos;
+        int mins = (int)(displayTime / 60); int secs = (int)(displayTime) % 60;
+        juce::String timeStr = juce::String::formatted("%02d:%02d", mins, secs);
+        g.setColour(juce::Colours::white); g.setFont(juce::Font(radius * 0.45f, juce::Font::bold));
+        g.drawText(timeStr, circleArea.withHeight(radius * 0.8f).withY(center.y - radius * 0.35f), juce::Justification::centred);
+    }
+private:
+    void timerCallback() override { repaint(); }
+    AudioCore& audioCore; int deckIdx; juce::Colour accentColour; bool remainingMode;
+};
+
+class LoopControlGroup : public juce::Component {
+public:
+    LoopControlGroup(juce::Colour accent) : accentColour(accent) {
+        addAndMakeVisible(title); title.setText("LOOP", juce::dontSendNotification);
+        title.setFont(juce::Font(10.0f, juce::Font::bold));
+        addAndMakeVisible(beats); beats.setText("4 BEATS", juce::dontSendNotification);
+        beats.setFont(juce::Font(9.0f, juce::Font::bold)); beats.setColour(juce::Label::textColourId, accentColour);
+        setupBtn(inBtn, "IN"); setupBtn(outBtn, "OUT"); setupBtn(autoBtn, "AUTO LOOP");
+        
+        inBtn.onClick = [this] { if (onInPressed) onInPressed(); };
+        outBtn.onClick = [this] { if (onOutPressed) onOutPressed(); };
+        autoBtn.onClick = [this] { if (onAutoPressed) onAutoPressed(); };
+    }
+    void setupBtn(juce::TextButton& b, const juce::String& t) {
+        addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
+    }
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().toFloat();
+        g.setColour(accentColour.withAlpha(0.4f)); g.drawRoundedRectangle(area, 6.0f, 1.5f);
+    }
+    void resized() override {
+        auto area = getLocalBounds().reduced(6); auto header = area.removeFromTop(15);
+        title.setBounds(header.removeFromLeft(header.getWidth() / 2)); beats.setBounds(header);
+        autoBtn.setBounds(area.removeFromBottom(22));
+        int btnW = area.reduced(0, 5).getWidth() / 2;
+        inBtn.setBounds(area.removeFromLeft(btnW).reduced(1, 4)); outBtn.setBounds(area.reduced(1, 4));
+    }
+public:
+    void setBeats(int b) { beats.setText(juce::String(b) + " BEATS", juce::dontSendNotification); }
+    std::function<void()> onInPressed;
+    std::function<void()> onOutPressed;
+    std::function<void()> onAutoPressed;
+    juce::TextButton inBtn, outBtn, autoBtn;
+
+private:
+    juce::Colour accentColour; juce::Label title, beats; 
+};
+
+class DeckSection : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer {
+public:
+    DeckSection(AudioCore& ac, int idx, bool isLeft) 
+        : audioCore(ac), deckIdx(idx), leftSide(isLeft), jog(ac, idx, isLeft ? juce::Colours::cyan : juce::Colours::tomato, isLeft),
+          vu(ac, idx), loopControls(isLeft ? juce::Colours::cyan : juce::Colours::tomato) {
+        addAndMakeVisible(deckLabel); deckLabel.setFont(juce::Font(18.0f, juce::Font::bold));
+        addAndMakeVisible(badge); 
+        badge.onClick = [this] { audioCore.setMasterDeck(deckIdx); };
+        addAndMakeVisible(bpmLabel); bpmLabel.setFont(juce::Font(28.0f, juce::Font::bold));
+        bpmLabel.setColour(juce::Label::textColourId, leftSide ? juce::Colours::cyan : juce::Colours::red);
+        addAndMakeVisible(jog); addAndMakeVisible(vu); addAndMakeVisible(loopControls);
+        addAndMakeVisible(pitchSlider); pitchSlider.setSliderStyle(juce::Slider::LinearVertical);
+        pitchSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        pitchSlider.setRange(-1.0, 1.0, 0.001);
+        pitchSlider.setValue(0.0);
+        pitchSlider.onValueChange = [this] {
+            audioCore.setDeckPitch(deckIdx, pitchSlider.getValue());
+        };
+        setupButton(playBtn, "PLAY", leftSide ? juce::Colours::blue : juce::Colours::red);
+        
+        playBtn.onClick = [this] { 
+            if (audioCore.isDeckPlaying(deckIdx)) {
+                if (deckIdx == 0) audioCore.stopDeckA(); 
+                else audioCore.stopDeckB(); 
+            } else {
+                // Resume exactly from CUE point as requested
+                audioCore.triggerDeckCue(deckIdx); 
+                if (deckIdx == 0) audioCore.playDeckA(); 
+                else audioCore.playDeckB(); 
+            }
+        };
+
+        setupButton(cueBtn, "CUE", juce::Colour(0xff222222));
+        cueBtn.onClick = [this] { 
+            if (audioCore.isDeckLoopEnabled(deckIdx)) {
+                // If loop is active, trigger CUE (go back to loop start)
+                audioCore.triggerDeckCue(deckIdx);
+            } else {
+                // If loop is inactive, update CUE to current playhead position
+                audioCore.setDeckCuePoint(deckIdx, audioCore.getDeckPosition(deckIdx));
+            }
+        };
+
+        setupButton(syncBtn, "SYNC", juce::Colour(0xff222222)); 
+        syncBtn.onClick = [this] { 
+            audioCore.setSyncEnabled(deckIdx, !audioCore.isSyncEnabled(deckIdx)); 
+        };
+        setupButton(revBtn, "REV", juce::Colour(0xff222222));
+        
+        setupButton(ejectBtn, juce::String::fromUTF8("\xe2\x96\xb2"), juce::Colour(0xff151515)); 
+        ejectBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::grey);
+        ejectBtn.onClick = [this] { 
+            if (deckIdx == 0) audioCore.ejectDeckA(); 
+            else audioCore.ejectDeckB(); 
+            repaint();
+        };
+
+        auto updateLoopWithCurrentBeats = [this](bool activate) {
+            double bpm = audioCore.getDeckBpm(deckIdx);
+            if (bpm <= 0) bpm = 120.0;
+            
+            int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
+            int numBeats = beatOptions[currentBeatIdx];
+            double duration = (60.0 / bpm) * numBeats;
+            
+            double startPos = audioCore.isDeckLoopEnabled(deckIdx) ? 
+                              audioCore.getDeckLoopStart(deckIdx) : 
+                              audioCore.getDeckPosition(deckIdx);
+            
+            audioCore.setDeckLoopRange(deckIdx, startPos, duration);
+            if (activate) audioCore.setDeckLoopEnabled(deckIdx, true);
+            
+            // Mark CUE at loop start (mandatory)
+            audioCore.setDeckCuePoint(deckIdx, startPos);
+            loopControls.setBeats(numBeats);
+        };
+
+        loopControls.onInPressed = [this, updateLoopWithCurrentBeats] {
+            if (audioCore.isDeckLoopEnabled(deckIdx)) {
+                // Divisor Mode: Divide by 2
+                int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
+                int currentBeats = beatOptions[currentBeatIdx];
+                if (currentBeats > 1) {
+                    currentBeatIdx--;
+                    updateLoopWithCurrentBeats(true);
+                } else {
+                    // Release loop if at minimum or as requested
+                    audioCore.setDeckLoopEnabled(deckIdx, false);
+                }
+            } else {
+                // Manual IN: Define entry point + update CUE
+                double pos = audioCore.getDeckPosition(deckIdx);
+                loopInPoint = pos;
+                audioCore.setDeckCuePoint(deckIdx, pos);
+                loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
+            }
+        };
+
+        loopControls.onOutPressed = [this, updateLoopWithCurrentBeats] {
+            if (audioCore.isDeckLoopEnabled(deckIdx)) {
+                // Multiplier Mode: Multiply by 2
+                int beatOptions[] = { 1, 2, 4, 8, 16, 32 };
+                int currentBeats = beatOptions[currentBeatIdx];
+                if (currentBeats < 32) {
+                    currentBeatIdx++;
+                    updateLoopWithCurrentBeats(true);
+                }
+            } else {
+                // Manual OUT: Close and activate loop immediately
+                double currentPos = audioCore.getDeckPosition(deckIdx);
+                if (currentPos > loopInPoint) {
+                    audioCore.setDeckLoopRange(deckIdx, loopInPoint, currentPos - loopInPoint);
+                    audioCore.setDeckLoopEnabled(deckIdx, true);
+                    loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
+                }
+            }
+        };
+
+        loopControls.onAutoPressed = [this, updateLoopWithCurrentBeats] {
+            bool isLooping = audioCore.isDeckLoopEnabled(deckIdx);
+            if (isLooping) {
+                // Release loop
+                audioCore.setDeckLoopEnabled(deckIdx, false);
+                loopControls.inBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
+            } else {
+                // Start 4-beat loop from current position
+                currentBeatIdx = 2; // Reset to 4 beats
+                updateLoopWithCurrentBeats(true);
+            }
+        };
+
+        startTimer(16);
+    }
+
+    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
+    void filesDropped(const juce::StringArray& files, int, int) override {
+        if (files.size() > 0) (deckIdx == 0 ? audioCore.loadDeckA(juce::File(files[0])) : audioCore.loadDeckB(juce::File(files[0])));
+    }
+    void setupButton(juce::TextButton& b, const juce::String& t, juce::Colour c) { addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, c); }
+    void paint(juce::Graphics& g) override { g.setColour(juce::Colour(0xff151515)); g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f); }
+    void resized() override {
+        auto area = getLocalBounds().reduced(15); auto header = area.removeFromTop(40);
+        if (leftSide) { badge.setBounds(header.removeFromLeft(70).removeFromTop(20)); deckLabel.setBounds(header.removeFromLeft(100)); bpmLabel.setBounds(header.removeFromRight(100)); }
+        else { badge.setBounds(header.removeFromRight(70).removeFromTop(20)); deckLabel.setBounds(header.removeFromRight(100)); bpmLabel.setBounds(header.removeFromLeft(100)); }
+        auto footer = area.removeFromBottom(45); int btnW = footer.getWidth() / 4 - 5;
+        playBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5); cueBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5);
+        syncBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5); revBtn.setBounds(footer);
+        
+        // Position EJECT button discretely below BPM
+        auto ejectArea = leftSide ? getLocalBounds().withWidth(100).withX(getWidth() - 110) : getLocalBounds().withWidth(100).withX(10);
+        ejectArea = ejectArea.withHeight(20).withY(58); // Moved down for better spacing
+        ejectBtn.setBounds(ejectArea.withSizeKeepingCentre(24, 20));
+        if (leftSide) { pitchSlider.setBounds(area.removeFromLeft(35).reduced(5, 10)); loopControls.setBounds(area.removeFromLeft(110).withHeight(85).withY(pitchSlider.getBottom() - 85)); vu.setBounds(area.removeFromRight(12).reduced(0, 20)); }
+        else { pitchSlider.setBounds(area.removeFromRight(35).reduced(5, 10)); loopControls.setBounds(area.removeFromRight(110).withHeight(85).withY(pitchSlider.getBottom() - 85)); vu.setBounds(area.removeFromLeft(12).reduced(0, 20)); }
+        jog.setBounds(area.reduced(10));
+    }
+private:
+    void timerCallback() override {
+        bpmLabel.setText(juce::String(audioCore.getDeckBpm(deckIdx), 1), juce::dontSendNotification);
+        deckLabel.setText(audioCore.getDeckName(deckIdx).isEmpty() ? (deckIdx == 0 ? "DECK A" : "DECK B") : audioCore.getDeckName(deckIdx), juce::dontSendNotification);
+        bool isMaster = (audioCore.getMasterDeck() == deckIdx);
+        badge.setButtonText(isMaster ? "MASTER" : "SLAVE");
+        badge.setColour(juce::TextButton::buttonColourId, isMaster ? juce::Colours::blue : juce::Colours::white);
+        badge.setColour(juce::TextButton::textColourOffId, isMaster ? juce::Colours::white : juce::Colours::black);
+        badge.setColour(juce::TextButton::textColourOnId, isMaster ? juce::Colours::white : juce::Colours::black);
+        bool playing = audioCore.isDeckPlaying(deckIdx); playBtn.setButtonText(playing ? "PAUSE" : "PLAY");
+        playBtn.setColour(juce::TextButton::buttonColourId, playing ? juce::Colours::green : (leftSide ? juce::Colours::blue : juce::Colours::red));
+        
+        bool isLooping = audioCore.isDeckLoopEnabled(deckIdx);
+        loopControls.autoBtn.setToggleState(isLooping, juce::dontSendNotification);
+        loopControls.autoBtn.setColour(juce::TextButton::buttonColourId, isLooping ? juce::Colours::orange : juce::Colour(0xff111111));
+
+        bool sync = audioCore.isSyncEnabled(deckIdx);
+        syncBtn.setColour(juce::TextButton::buttonColourId, sync ? juce::Colours::white : juce::Colour(0xff222222));
+        syncBtn.setColour(juce::TextButton::textColourOffId, sync ? juce::Colour(0xffcccc00) : juce::Colours::white);
+    }
+    AudioCore& audioCore; int deckIdx; bool leftSide; juce::Label deckLabel, bpmLabel; juce::TextButton badge; JogWheel jog; VUMeter vu; juce::Slider pitchSlider; juce::TextButton playBtn, cueBtn, syncBtn, revBtn, ejectBtn; LoopControlGroup loopControls;
+    double loopInPoint = 0.0;
+    int currentBeatIdx = 2; // Default 4 beats
+};
+
+class MixerCenterSection : public juce::Component {
+public:
+    MixerCenterSection(AudioCore& ac) : audioCore(ac), fxA(ac, 0), fxB(ac, 1) {
+        setLookAndFeel(&lookAndFeel);
+        
+        addAndMakeVisible(content);
+        content.addAndMakeVisible(fxA);
+        content.addAndMakeVisible(fxB);
+
+
+        // Side Knobs
+        setupKnobCol(knobsA, 0);
+        setupKnobCol(knobsB, 1);
+
+        // Faders
+        setupFader(faderA, 0);
+        setupFader(faderB, 1);
+
+        // Cue Buttons
+        setupCue(cueA, 0);
+        setupCue(cueB, 1);
+
+        content.addAndMakeVisible(crossfader);
+        crossfader.setSliderStyle(juce::Slider::LinearHorizontal);
+        crossfader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        crossfader.onValueChange = [this] { audioCore.setCrossfaderPosition((float)crossfader.getValue()); };
+        crossfader.setRange(0.0, 1.0);
+        crossfader.setValue(0.5);
+    }
+
+    ~MixerCenterSection() override { setLookAndFeel(nullptr); }
+
+    struct SimpleXY : public juce::Component {
+        std::function<void(float, float)> onPointChanged;
+        std::function<void(bool)> onEnableChanged;
+        float curX = 0.5f, curY = 0.5f;
+        bool active = false;
+        void paint(juce::Graphics& g) override {
+            auto area = getLocalBounds();
+            
+            // 1. Dark Background with Grid
+            g.setColour(juce::Colour(0xff0a0a0a));
+            g.fillRoundedRectangle(area.toFloat(), 6.0f);
+            
+            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            int gridStep = 40;
+            for (int x = gridStep; x < area.getWidth(); x += gridStep) g.drawVerticalLine(x, 0, (float)area.getHeight());
+            for (int y = gridStep; y < area.getHeight(); y += gridStep) g.drawHorizontalLine(y, 0, (float)area.getWidth());
+
+            // 2. "LADDER FILTER" Header (From reference image)
+            auto headerArea = area.removeFromTop(40);
+            g.setColour(juce::Colour(0xff222222));
+            g.fillRoundedRectangle(headerArea.withSizeKeepingCentre(160, 24).toFloat(), 12.0f);
+            g.setColour(juce::Colours::white.withAlpha(0.7f));
+            g.setFont(juce::Font(12.0f, juce::Font::bold));
+            g.drawText("LADDER FILTER", headerArea, juce::Justification::centred);
+
+            // 3. Axis Labels (Resonance and Cutoff)
+            g.setColour(juce::Colours::white.withAlpha(0.3f));
+            g.setFont(juce::Font(10.0f, juce::Font::bold));
+            g.drawText("RESONANCE", area.withHeight(30), juce::Justification::centred);
+            g.drawText("CUTOFF", area.withWidth(60).withY(area.getHeight()/2 + 40), juce::Justification::centredLeft);
+
+            // 4. Glowing Yellow Indicator
+            float px = curX * area.getWidth();
+            float py = (1.0f - curY) * area.getHeight() + 40; // Offset by header
+            
+            juce::Colour lime = juce::Colours::lime;
+            
+            if (active) {
+                // Outer Glow only when active
+                for (int i = 5; i > 0; --i) {
+                    float r = 12.0f + i * 8.0f;
+                    g.setColour(lime.withAlpha(0.1f * (6-i)));
+                    g.fillEllipse(px - r, py - r, r * 2, r * 2);
+                }
+            }
+            
+            // Inner Core
+            g.setColour(active ? lime : lime.withAlpha(0.4f));
+            g.fillEllipse(px - 10, py - 10, 20, 20);
+        }
+        void mouseDown(const juce::MouseEvent& e) override { active = true; handleMouse(e); if (onEnableChanged) onEnableChanged(true); }
+        void mouseDrag(const juce::MouseEvent& e) override { handleMouse(e); }
+        void mouseUp(const juce::MouseEvent&) override { 
+            active = false; 
+            curX = 0.5f; 
+            curY = 0.5f;
+            if (onPointChanged) onPointChanged(curX, curY);
+            if (onEnableChanged) onEnableChanged(false); 
+            repaint(); 
+        }
+        void handleMouse(const juce::MouseEvent& e) {
+            auto area = getLocalBounds();
+            area.removeFromTop(40);
+            curX = juce::jlimit(0.0f, 1.0f, (float)e.x / area.getWidth());
+            curY = juce::jlimit(0.0f, 1.0f, 1.0f - (float)(e.y - 40) / area.getHeight());
+            if (onPointChanged) onPointChanged(curX, curY);
+            repaint();
+        }
+    };
+
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(0xff0d0d0d));
+        g.fillRoundedRectangle(area, 12.0f);
+        
+
+        // Draw fader scales
+        g.setColour(juce::Colours::grey.withAlpha(0.5f));
+        g.setFont(10.0f);
+        auto drawScale = [&](juce::Rectangle<int> r) {
+            g.drawText("+10", r.getX() - 25, r.getY(), 20, 15, juce::Justification::right);
+            g.drawText("-inf", r.getX() - 25, r.getBottom() - 15, 20, 15, juce::Justification::right);
+        };
+        drawScale(faderA.getBounds());
+        drawScale(faderB.getBounds());
+    }
+
+    void resized() override {
+        auto area = getLocalBounds();
+        
+        // 1200x800 is the reference size for 'content'
+        float refW = 1200.0f;
+        float refH = 800.0f;
+        
+        float scaleX = (float)area.getWidth() / refW;
+        float scaleY = (float)area.getHeight() / refH;
+        float scale = std::min(scaleX, scaleY);
+        
+        content.setBounds(0, 0, (int)refW, (int)refH);
+        content.setTransform(juce::AffineTransform::scale(scale));
+        content.setCentrePosition(area.getCentre());
+
+        // --- Actual Layout logic inside content ---
+        int w = (int)refW, h = (int)refH;
+        
+
+        int sideW = 80;
+        int faderW = 60;
+        int gap = 15;
+        int fxW = (w - (sideW * 2 + faderW * 2 + gap * 5)) / 2;
+        int mainY = 30; // Moved up from 120
+        int mainH = 650; // Increased from 550
+
+        int curX = (w - (sideW * 2 + faderW * 2 + fxW * 2 + gap * 5)) / 2;
+        
+        // --- SYMMETRICAL LAYOUT ---
+        // Left Column (Side Knobs A)
+        layoutKnobCol(knobsA, curX, mainY, sideW, mainH); 
+        curX += sideW + gap;
+
+        // Left Fader A + Cue A
+        faderA.setBounds(curX, mainY + 50, faderW, mainH - 150);
+        cueA.setBounds(curX - 10, mainY + mainH - 70, faderW + 20, 35);
+        curX += faderW + gap;
+
+        // FX Panel A
+        fxA.setBounds(curX, mainY, fxW, mainH); 
+        curX += fxW + gap;
+
+        // FX Panel B
+        fxB.setBounds(curX, mainY, fxW, mainH); 
+        curX += fxW + gap;
+
+        // Right Fader B + Cue B
+        faderB.setBounds(curX, mainY + 50, faderW, mainH - 150);
+        cueB.setBounds(curX - 10, mainY + mainH - 70, faderW + 20, 35);
+        curX += faderW + gap;
+
+        // Right Column (Side Knobs B)
+        layoutKnobCol(knobsB, curX, mainY, sideW, mainH);
+
+        crossfader.setBounds((w - 400) / 2, h - 80, 400, 50);
+    }
+
+private:
+    struct CustomLookAndFeel : public juce::LookAndFeel_V4 {
+        CustomLookAndFeel() {
+            setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
+            setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::cyan);
+            setColour(juce::Slider::trackColourId, juce::Colour(0xff222222));
+        }
+        void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                             float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
+            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(6);
+            auto radius = std::min(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            
+            // Minimalist Dark Circle
+            g.setColour(juce::Colour(0xff121212));
+            g.fillEllipse(bounds);
+            g.setColour(juce::Colours::black);
+            g.drawEllipse(bounds, 1.5f);
+
+            // Simple indicator tick (like the reference image)
+            auto lineW = 3.5f;
+            auto thumbWidth = lineW;
+            juce::Path p;
+            p.addRoundedRectangle(-thumbWidth * 0.5f, -radius, thumbWidth, radius * 0.6f, 1.0f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
+            
+            // Use cyan for the tick to keep the theme, or light grey if preferred. 
+            // User's right image shows light grey/silver.
+            g.setColour(juce::Colour(0xffcccccc)); 
+            g.fillPath(p);
+        }
+
+        void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
+                             float sliderPos, float minSliderPos, float maxSliderPos,
+                             const juce::Slider::SliderStyle style, juce::Slider& slider) override {
+            bool isVertical = (style == juce::Slider::LinearVertical);
+            
+            // 1. Background Track
+            auto trackArea = isVertical ? 
+                juce::Rectangle<float>((float)x + width * 0.45f, (float)y, width * 0.1f, (float)height) :
+                juce::Rectangle<float>((float)x, (float)y + height * 0.45f, (float)width, height * 0.1f);
+            
+            g.setColour(juce::Colour(0xff050505));
+            g.fillRoundedRectangle(trackArea, 2.0f);
+            
+            // 2. Professional Fader Cap (Rectangular with cyan line)
+            float thumbW = isVertical ? (float)width * 0.85f : 45.0f;
+            float thumbH = isVertical ? 25.0f : (float)height * 0.85f;
+            float thumbX = isVertical ? (float)x + (width - thumbW) * 0.5f : sliderPos - thumbW * 0.5f;
+            float thumbY = isVertical ? sliderPos - thumbH * 0.5f : (float)y + (height - thumbH) * 0.5f;
+
+            juce::Rectangle<float> thumb(thumbX, thumbY, thumbW, thumbH);
+            
+            // Main Cap Body (Dark Gradient)
+            juce::ColourGradient grad(juce::Colour(0xff2a2a2a), thumbX, thumbY, juce::Colour(0xff1a1a1a), thumbX, thumbY + thumbH, false);
+            g.setGradientFill(grad);
+            g.fillRoundedRectangle(thumb, 3.0f);
+            
+            // Cap Outline
+            g.setColour(juce::Colours::black);
+            g.drawRoundedRectangle(thumb, 3.0f, 1.0f);
+            
+            // Central Cyan Line (The "Marker")
+            g.setColour(juce::Colours::cyan);
+            if (isVertical) {
+                g.fillRect(thumbX + 2, thumbY + thumbH * 0.5f - 1.0f, thumbW - 4, 2.0f);
+                // Subtle glow for the line
+                g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+                g.fillRect(thumbX + 2, thumbY + thumbH * 0.5f - 2.0f, thumbW - 4, 4.0f);
+            } else {
+                g.fillRect(thumbX + thumbW * 0.5f - 1.0f, thumbY + 2, 2.0f, thumbH - 4);
+                // Subtle glow for the line
+                g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+                g.fillRect(thumbX + thumbW * 0.5f - 2.0f, thumbY + 2, 4.0f, thumbH - 4);
+            }
+        }
+    };
+
+    struct FxKnobLookAndFeel : public CustomLookAndFeel {
+        void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                             float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
+            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(4);
+            auto radius = std::min(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            
+            // Neon Pink / Magenta theme for FX
+            juce::Colour neonColor = juce::Colour(0xffff00ff); 
+            bool isActive = slider.getProperties()["isActive"];
+
+            // Dark Outer Ring
+            g.setColour(juce::Colour(0xff0d0d0d));
+            g.fillEllipse(bounds);
+            
+            // Inner Circle
+            auto innerBounds = bounds.reduced(6);
+            g.setColour(juce::Colour(0xff1a1a1a));
+            g.fillEllipse(innerBounds);
+            
+            // Indicator and Arc
+            float lineW = 4.0f;
+            float arcRadius = radius - lineW * 0.5f - 2;
+            
+            // Value Arc (Pink)
+            if (isActive) {
+                g.setColour(neonColor.withAlpha(0.2f));
+                juce::Path bgArc;
+                bgArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+                g.strokePath(bgArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+                g.setColour(neonColor);
+                juce::Path valueArc;
+                valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, toAngle, true);
+                g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+
+            // Central Indicator Tick
+            juce::Path p;
+            p.addRoundedRectangle(-lineW * 0.5f, -radius + 4, lineW, radius * 0.5f, 1.5f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
+            g.setColour(isActive ? neonColor : juce::Colours::grey);
+            g.fillPath(p);
+        }
+    };
+
+    struct ToggleSlider : public juce::Slider {
+        std::function<void(bool)> onToggle;
+        void mouseUp(const juce::MouseEvent& e) override {
+            juce::Slider::mouseUp(e);
+            if (e.getDistanceFromDragStart() < 3) {
+                bool newState = !getProperties()["isActive"];
+                getProperties().set("isActive", newState);
+                if (onToggle) onToggle(newState);
+                repaint();
+            }
+        }
+    };
+
+    struct FxPanel : public juce::Component {
+        int deckIdx;
+        AudioCore& audioCore;
+        int activeTab = 0;
+        
+        struct FxSlot : public juce::Component {
+            ToggleSlider knob;
+            juce::Label label;
+            FxKnobLookAndFeel fxLF;
+            
+            FxSlot(const juce::String& name) {
+                addAndMakeVisible(knob); 
+                knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+                knob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+                knob.setLookAndFeel(&fxLF);
+                knob.getProperties().set("isActive", false);
+
+                addAndMakeVisible(label); 
+                label.setText(name, juce::dontSendNotification);
+                label.setFont(juce::Font(10.0f, juce::Font::bold));
+                label.setJustificationType(juce::Justification::centred);
+                label.setColour(juce::Label::textColourId, juce::Colours::grey.withAlpha(0.6f));
+            }
+            ~FxSlot() { knob.setLookAndFeel(nullptr); }
+
+            void resized() override {
+                auto area = getLocalBounds();
+                // Layout from image: Knob top, Label bottom
+                label.setBounds(area.removeFromBottom(20));
+                knob.setBounds(area.reduced(2));
+            }
+        };
+
+        juce::OwnedArray<FxSlot> slots;
+        MixerCenterSection::SimpleXY xyPad;
+
+        FxPanel(AudioCore& ac, int idx) : deckIdx(idx), audioCore(ac) {
+            static const char* fxNames[] = { "DELAY", "ECHO", "REVERB", "FLANGE", "SPACE", "DUB ECHO" };
+            for (int i = 0; i < 6; ++i) {
+                auto* s = slots.add(new FxSlot(fxNames[i]));
+                addAndMakeVisible(s);
+                s->knob.onValueChange = [this, i, s] { audioCore.setFxAmount(deckIdx, i, (float)s->knob.getValue()); };
+                s->knob.onToggle = [this, i](bool active) { audioCore.setFxEnabled(deckIdx, i, active); };
+                s->knob.setRange(0.0, 1.0); 
+                s->knob.setValue(0.5);
+            }
+            addAndMakeVisible(xyPad);
+            xyPad.onPointChanged = [this](float x, float y) { audioCore.setXyFilter(deckIdx, x, y); };
+            xyPad.onEnableChanged = [this](bool e) { audioCore.setXyFilterEnabled(deckIdx, e); };
+            xyPad.setVisible(false);
+        }
+
+        void paint(juce::Graphics& g) override {
+            auto area = getLocalBounds();
+            g.setColour(juce::Colour(0xff1a1a1a));
+            g.fillRoundedRectangle(area.toFloat(), 8.0f);
+            
+            // Draw Tabs
+            g.setFont(juce::Font(14.0f, juce::Font::bold));
+            auto tabArea = area.removeFromTop(40);
+            
+            auto leftTab = tabArea.removeFromLeft(tabArea.getWidth() / 2);
+            auto rightTab = tabArea;
+
+            g.setColour(activeTab == 0 ? juce::Colours::white : juce::Colours::grey);
+            g.drawText("EFFECTS", leftTab, juce::Justification::centred);
+            
+            g.setColour(activeTab == 1 ? juce::Colours::white : juce::Colours::grey);
+            g.drawText("TOUCH", rightTab, juce::Justification::centred);
+            
+            g.setColour(juce::Colours::cyan);
+            if (activeTab == 0) g.fillRect(leftTab.withSizeKeepingCentre(leftTab.getWidth() - 40, 2).withY(35));
+            else g.fillRect(rightTab.withSizeKeepingCentre(rightTab.getWidth() - 40, 2).withY(35));
+            
+            g.setColour(juce::Colours::grey.withAlpha(0.3f));
+            g.drawVerticalLine(area.getWidth() / 2, 8, 32);
+        }
+
+        void mouseDown(const juce::MouseEvent& e) override {
+            if (e.y < 40) {
+                int newTab = (e.x < getWidth() / 2) ? 0 : 1;
+                if (newTab != activeTab) {
+                    activeTab = newTab;
+                    bool fxVisible = (activeTab == 0);
+                    for (auto* s : slots) s->setVisible(fxVisible);
+                    xyPad.setVisible(!fxVisible);
+                    resized(); // Recalculate layout for the new active component
+                    repaint();
+                }
+            }
+        }
+
+        void resized() override {
+            auto area = getLocalBounds();
+            area.removeFromTop(45); // Reserve space for tabs
+            
+            if (activeTab == 0) {
+                auto grid = area.reduced(10);
+                int kw = grid.getWidth() / 2, kh = grid.getHeight() / 3;
+                for (int i = 0; i < 6; ++i) {
+                    slots[i]->setBounds(grid.getX() + (i % 2) * kw, grid.getY() + (i / 2) * kh, kw, kh);
+                    slots[i]->setVisible(true);
+                }
+                xyPad.setVisible(false);
+            } else {
+                for (auto* s : slots) s->setVisible(false);
+                xyPad.setBounds(area.reduced(15));
+                xyPad.setVisible(true);
+            }
+        }
+    };
+
+    void setupKnobCol(juce::OwnedArray<juce::Slider>& knobs, int deckIdx) {
+        static const char* labelsText[] = { "TRIM", "HIGH", "MID", "LOW", "COLOR" };
+        for (int i = 0; i < 5; ++i) {
+            auto* lbl = knobLabels.add(new juce::Label());
+            content.addAndMakeVisible(lbl);
+            lbl->setText(labelsText[i], juce::dontSendNotification);
+            lbl->setFont(juce::Font(12.0f, juce::Font::bold));
+            lbl->setJustificationType(juce::Justification::centred);
+            lbl->setColour(juce::Label::textColourId, juce::Colours::grey);
+
+            auto* s = knobs.add(new juce::Slider());
+            content.addAndMakeVisible(s);
+            s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+            s->setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+            if (i == 0) { s->setRange(0.0, 1.5); s->setValue(1.0); s->onValueChange = [this, deckIdx, s] { audioCore.setDeckGain(deckIdx, (float)s->getValue()); }; }
+            else if (i < 4) { s->setRange(-24.0, 6.0); s->setValue(0.0); s->onValueChange = [this, deckIdx, i, s] { audioCore.setDeckEQ(deckIdx, 3-i, (float)s->getValue()); }; }
+            else { s->setRange(-1.0, 1.0); s->setValue(0.0); s->onValueChange = [this, deckIdx, s] { audioCore.setDeckFilter(deckIdx, (float)s->getValue()); }; }
+        }
+    }
+
+    void layoutKnobCol(juce::OwnedArray<juce::Slider>& knobs, int x, int y, int w, int h) {
+        int kh = h / 5;
+        // Find labels starting from the end of the list (since we add them in pairs of 5)
+        int labelStartIdx = (&knobs == &knobsA) ? 0 : 5;
+        for (int i = 0; i < 5; ++i) {
+            auto rect = juce::Rectangle<int>(x, y + i * kh, w, kh);
+            knobLabels[labelStartIdx + i]->setBounds(rect.removeFromTop(15));
+            knobs[i]->setBounds(rect.reduced(2));
+        }
+    }
+
+    void setupFader(juce::Slider& s, int deckIdx) {
+        content.addAndMakeVisible(s);
+        s.setSliderStyle(juce::Slider::LinearVertical);
+        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        s.setRange(0.0, 1.0);
+        s.setValue(1.0);
+        s.onValueChange = [this, deckIdx, &s] { audioCore.setDeckVolume(deckIdx, (float)s.getValue()); };
+    }
+
+    void setupCue(juce::TextButton& b, int deckIdx) {
+        content.addAndMakeVisible(b);
+        b.setButtonText("CUE");
+        b.setClickingTogglesState(true);
+        // Neon Green Style
+        b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff003300)); // Darker background when off
+        b.setColour(juce::TextButton::buttonOnColourId, juce::Colours::lime);
+        b.setColour(juce::TextButton::textColourOffId, juce::Colours::lime);
+        b.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+    }
+
+    AudioCore& audioCore;
+    CustomLookAndFeel lookAndFeel;
+    juce::Component content;
+    juce::OwnedArray<juce::Label> knobLabels;
+    FxPanel fxA, fxB;
+    juce::OwnedArray<juce::Slider> knobsA, knobsB;
+    juce::Slider faderA, faderB, crossfader;
+    juce::TextButton cueA, cueB;
+
+};
+
+class MixerComponent : public juce::Component, 
+                      public juce::FileDragAndDropTarget,
+                      public juce::DragAndDropTarget {
+public:
+    MixerComponent(AudioCore& ac, TrackBrowserComponent* b) 
+        : audioCore(ac), browser(b), waveA(ac, 0), waveB(ac, 1), deckA(ac, 0, true), deckB(ac, 1, false), mixer(ac) {
+        addAndMakeVisible(waveA); addAndMakeVisible(waveB); addAndMakeVisible(deckA); addAndMakeVisible(deckB); addAndMakeVisible(mixer);
+    }
+    
+    // External File Drag (Explorer)
+    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
+    void filesDropped(const juce::StringArray& files, int x, int) override {
+        if (files.size() > 0) { 
+            if (x < getWidth() / 2) audioCore.loadDeckA(juce::File(files[0])); 
+            else audioCore.loadDeckB(juce::File(files[0])); 
+        }
+    }
+
+    // Internal Drag (Track Browser Grid)
+    bool isInterestedInDragSource(const SourceDetails& details) override {
+        // TrackBrowserComponent returns pipe-separated paths as a string
+        juce::String desc = details.description.toString();
+        if (desc.contains("|")) return true;
+        return juce::File::isAbsolutePath(desc);
+    }
+    void itemDropped(const SourceDetails& details) override {
+        juce::String desc = details.description.toString();
+        // Extract first path from pipe-separated string
+        juce::String firstPath = desc.contains("|")
+            ? desc.upToFirstOccurrenceOf("|", false, false).trim()
+            : desc.trim();
+        if (juce::File::isAbsolutePath(firstPath)) {
+            int x = details.localPosition.getX();
+            if (x < getWidth() / 2) audioCore.loadDeckA(juce::File(firstPath));
+            else audioCore.loadDeckB(juce::File(firstPath));
+        }
+    }
+
+    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::black); }
+
+    void paintOverChildren(juce::Graphics& g) override {
+        auto area = getLocalBounds();
+        auto h = getHeight();
+        auto waveAreaHeight = (int)(h * 0.18f); // Must match resized() 0.18f
+        
+        float centerX = area.getWidth() / 2.0f;
+        
+        // Single unified vertical line (Playhead)
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.fillRect(centerX - 1.5f, 0.0f, 3.0f, (float)waveAreaHeight);
+        
+        // Slight glow/shadow
+        g.setColour(juce::Colours::white.withAlpha(0.2f));
+        g.fillRect(centerX - 2.5f, 0.0f, 5.0f, (float)waveAreaHeight);
+    }
+
+    void resized() override {
+        auto area = getLocalBounds();
+        auto h = getHeight();
+        
+        // 1. Browser at the bottom (35% height)
+        auto browserArea = area.removeFromBottom((int)(h * 0.35f));
+        if (browser != nullptr) {
+            browser->setTransform(juce::AffineTransform());
+            browser->setBounds(browserArea);
+            browser->setVisible(true);
+        }
+
+        // 2. Waveforms at the top (18% height)
+        auto waveArea = area.removeFromTop((int)(h * 0.18f));
+        waveA.setTransform(juce::AffineTransform());
+        waveB.setTransform(juce::AffineTransform());
+        waveA.setBounds(waveArea.removeFromTop(waveArea.getHeight() / 2).reduced(2)); 
+        waveB.setBounds(waveArea.reduced(2));
+
+        // 3. Middle row: [ Deck A ] [ Mixer ] [ Deck B ]
+        area.reduce(10, 5);
+        int centerW = (int)(area.getWidth() * 0.35f); 
+        int sideW = (area.getWidth() - centerW) / 2;
+        
+        deckA.setVisible(true);
+        deckB.setVisible(true);
+        deckA.setTransform(juce::AffineTransform());
+        deckB.setTransform(juce::AffineTransform());
+        mixer.setTransform(juce::AffineTransform());
+
+        deckA.setBounds(area.removeFromLeft(sideW).reduced(2));
+        mixer.setBounds(area.removeFromLeft(centerW).reduced(2));
+        deckB.setBounds(area.reduced(2));
+    }
+private:
+    AudioCore& audioCore; TrackBrowserComponent* browser; SimpleWaveform waveA, waveB; DeckSection deckA, deckB; MixerCenterSection mixer;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerComponent)
+};

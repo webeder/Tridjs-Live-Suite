@@ -6,29 +6,35 @@ AudioCore::AudioCore()
     // Initialize ONNX Runtime
     try {
         ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "TridjsDemucs");
-        // We will load the session on first demand or if model exists
         onnxInitialized = true;
     } catch (...) {
         onnxInitialized = false;
     }
 
-    // Registra formatos WAV, MP3, etc.
     formatManager.registerBasicFormats();
 
-    // Setup FX Processors
     for (int i = 0; i < NUM_FX; ++i)
     {
         EffectSlot slot;
         fxProcessors.push_back(std::move(slot));
     }
 
-    // Main Track Deck
-    mainTrackChannel = std::make_unique<PlaybackChannel>();
-    mainTrackChannel->transport = std::make_unique<juce::AudioTransportSource>();
-    mainTrackChannel->resampler = std::make_unique<juce::ResamplingAudioSource>(mainTrackChannel->transport.get(), false, 2);
-    mixer.addInputSource(mainTrackChannel->resampler.get(), false);
+    // Deck A Setup
+    deckAChannel = std::make_unique<PlaybackChannel>();
+    deckAChannel->transport = std::make_unique<juce::AudioTransportSource>();
+    deckAChannel->resampler = std::make_unique<juce::ResamplingAudioSource>(deckAChannel->transport.get(), false, 2);
 
-    // Cria 9 canais simulando os 9 Pads
+    // Deck B Setup
+    deckBChannel = std::make_unique<PlaybackChannel>();
+    deckBChannel->transport = std::make_unique<juce::AudioTransportSource>();
+    deckBChannel->resampler = std::make_unique<juce::ResamplingAudioSource>(deckBChannel->transport.get(), false, 2);
+
+    // HandsFree Deck Setup
+    handsFreeChannel = std::make_unique<PlaybackChannel>();
+    handsFreeChannel->transport = std::make_unique<juce::AudioTransportSource>();
+    handsFreeChannel->resampler = std::make_unique<juce::ResamplingAudioSource>(handsFreeChannel->transport.get(), false, 2);
+
+    // Pads Setup
     for (int i = 0; i < 9; ++i)
     {
         auto channel = std::make_unique<PlaybackChannel>();
@@ -37,9 +43,22 @@ AudioCore::AudioCore()
         mixer.addInputSource (channel->resampler.get(), false);
         padChannels.push_back (std::move (channel));
     }
-    // Inicializa os ganhos dos stems como 1.0 (não mutado)
+
     for (int i = 0; i < NUM_STEMS; ++i)
         stemGains[i].setCurrentAndTargetValue(1.0f);
+
+    // Init EQ Filters
+    for (int i = 0; i < 2; ++i) {
+        deckAState.lowFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckAState.midFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckAState.highFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckBState.lowFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckBState.midFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckBState.highFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckHState.lowFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckHState.midFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+        deckHState.highFilter[i] = std::make_unique<juce::dsp::IIR::Filter<float>>();
+    }
 }
 
 AudioCore::~AudioCore()
@@ -50,71 +69,193 @@ AudioCore::~AudioCore()
 void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
     mixer.prepareToPlay (samplesPerBlockExpected, sampleRate);
+    deckAChannel->resampler->prepareToPlay(samplesPerBlockExpected, sampleRate);
+    deckBChannel->resampler->prepareToPlay(samplesPerBlockExpected, sampleRate);
+    handsFreeChannel->resampler->prepareToPlay(samplesPerBlockExpected, sampleRate);
     
-    // Initialize Delay Buffer (1 second capacity)
+    updateEQFilters(0);
+    updateEQFilters(1);
+    updateEQFilters(2);
+    
+    deckAChannel->processingBuffer.setSize(2, samplesPerBlockExpected);
+    deckBChannel->processingBuffer.setSize(2, samplesPerBlockExpected);
+    handsFreeChannel->processingBuffer.setSize(2, samplesPerBlockExpected);
+
     delayBuffer.setSize(2, (int)sampleRate);
     delayBuffer.clear();
     writePos = 0;
     currentSampleRate = sampleRate;
 
-    // Configura o smoothing para os ganhos dos stems (100ms de rampa)
     for (int i = 0; i < NUM_STEMS; ++i)
         stemGains[i].reset(sampleRate, 0.1);
 
-    // XY Filter Setup
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = samplesPerBlockExpected;
     spec.numChannels = 2;
-    xyLpFilter.prepare(spec);
-    xyLpFilter.setMode(juce::dsp::LadderFilterMode::LPF24);
-    xyHpFilter.prepare(spec);
-    xyHpFilter.setMode(juce::dsp::LadderFilterMode::HPF24);
-
-    xyFlanger.prepare(spec);
-    xyFlanger.setCentreDelay(7.0f);
-    xyFlanger.setFeedback(0.4f);
-    xyFlanger.setDepth(0.5f);
     
-    xyEcho.prepare(spec);
-    xyEcho.setMaximumDelayInSamples((int)(sampleRate * 2.0));
-    xyEcho.setDelay((float)(sampleRate * 0.4)); // 400ms fixo
+    deckAState.prepare(sampleRate);
+    deckBState.prepare(sampleRate);
+    deckHState.prepare(sampleRate);
+}
+
+void AudioCore::setCrossfaderPosition (float pos) { crossfaderPos = pos; }
+
+void AudioCore::setDeckGain(int deckIdx, float gain) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    state.gain = gain;
+}
+
+void AudioCore::setDeckVolume(int deckIdx, float vol) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    state.volume = vol;
+}
+
+void AudioCore::setDeckEQ(int deckIdx, int band, float level) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (band == 0) state.eqLow = level;
+    else if (band == 1) state.eqMid = level;
+    else if (band == 2) state.eqHigh = level;
+    updateEQFilters(deckIdx);
+}
+
+float AudioCore::getDeckGain(int deckIdx) const {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    return state.gain;
+}
+
+float AudioCore::getDeckVolume(int deckIdx) const {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    return state.volume;
+}
+
+float AudioCore::getDeckEQ(int deckIdx, int band) const {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (band == 0) return state.eqLow;
+    if (band == 1) return state.eqMid;
+    return state.eqHigh;
+}
+
+void AudioCore::updateEQFilters(int deckIdx)
+{
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    
+    float lowGain = std::pow(10.0f, state.eqLow / 20.0f);
+    float midGain = std::pow(10.0f, state.eqMid / 20.0f);
+    float hiGain = std::pow(10.0f, state.eqHigh / 20.0f);
+    
+    auto lowCoeffs = juce::dsp::IIR::Coefficients<float>::makeLowShelf(currentSampleRate, 250.0f, 0.707f, lowGain);
+    auto midCoeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(currentSampleRate, 1000.0f, 0.707f, midGain);
+    auto hiCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighShelf(currentSampleRate, 4000.0f, 0.707f, hiGain);
+    
+    for (int i = 0; i < 2; ++i) {
+        *state.lowFilter[i]->coefficients = *lowCoeffs;
+        *state.midFilter[i]->coefficients = *midCoeffs;
+        *state.highFilter[i]->coefficients = *hiCoeffs;
+    }
+
+    if (state.filter < -0.01f) {
+        state.lpFilter.setCutoffFrequencyHz(juce::jmap(std::abs(state.filter), 0.0f, 1.0f, 20000.0f, 20.0f));
+        state.hpFilter.setCutoffFrequencyHz(20.0f);
+    } else if (state.filter > 0.01f) {
+        state.hpFilter.setCutoffFrequencyHz(juce::jmap(state.filter, 0.0f, 1.0f, 20.0f, 15000.0f));
+        state.lpFilter.setCutoffFrequencyHz(20000.0f);
+    } else {
+        state.lpFilter.setCutoffFrequencyHz(20000.0f);
+        state.hpFilter.setCutoffFrequencyHz(20.0f);
+    }
+}
+
+void AudioCore::setDeckFilter(int deckIdx, float value) {
+    if (deckIdx == 0) deckAState.filter = value;
+    else if (deckIdx == 1) deckBState.filter = value;
+    else deckHState.filter = value;
+    updateEQFilters(deckIdx);
 }
 
 void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
+    handleSyncLogic();
     auto* mainBuffer = bufferToFill.buffer;
     int start = bufferToFill.startSample;
     int num = bufferToFill.numSamples;
 
-    // Capture Recording from Microphone (INPUT data must be captured BEFORE mixer starts writing to buffer)
+    // 0. Capture Input
     float inLevel = mainBuffer->getMagnitude(start, num);
     lastInputLevel.store(inLevel);
+
+    // 1. Process Decks Manually
+    deckAChannel->processingBuffer.setSize(2, num, false, false, true);
+    deckAChannel->processingBuffer.clear();
+    juce::AudioSourceChannelInfo deckAInfo(&deckAChannel->processingBuffer, 0, num);
+    deckAChannel->resampler->getNextAudioBlock(deckAInfo);
+    
+    deckBChannel->processingBuffer.setSize(2, num, false, false, true);
+    deckBChannel->processingBuffer.clear();
+    juce::AudioSourceChannelInfo deckBInfo(&deckBChannel->processingBuffer, 0, num);
+    deckBChannel->resampler->getNextAudioBlock(deckBInfo);
+
+    handsFreeChannel->processingBuffer.setSize(2, num, false, false, true);
+    handsFreeChannel->processingBuffer.clear();
+    juce::AudioSourceChannelInfo deckHInfo(&handsFreeChannel->processingBuffer, 0, num);
+    handsFreeChannel->resampler->getNextAudioBlock(deckHInfo);
+
+    auto applyMixer = [&](int idx, juce::AudioBuffer<float>& buf) {
+        auto& state = (idx == 0) ? deckAState : (idx == 1 ? deckBState : deckHState);
+        
+        buf.applyGain(state.gain);
+        processDeckDsp(buf, state, num);
+        buf.applyGain(state.volume);
+        
+        float p = buf.getMagnitude(0, num);
+        if (idx == 0) deckAPeak.store(p); 
+        else if (idx == 1) deckBPeak.store(p);
+        else deckHPeak.store(p);
+    };
+
+    applyMixer(0, deckAChannel->processingBuffer);
+    applyMixer(1, deckBChannel->processingBuffer);
+    applyMixer(2, handsFreeChannel->processingBuffer);
+
+    // 2. Mix Decks into Master Buffer with Crossfader
+    bufferToFill.clearActiveBufferRegion();
+    float crossA = std::cos(crossfaderPos * juce::MathConstants<float>::halfPi);
+    float crossB = std::sin(crossfaderPos * juce::MathConstants<float>::halfPi);
+    
+    mainBuffer->addFrom(0, start, deckAChannel->processingBuffer, 0, 0, num, crossA);
+    mainBuffer->addFrom(1, start, deckAChannel->processingBuffer, 1, 0, num, crossA);
+    mainBuffer->addFrom(0, start, deckBChannel->processingBuffer, 0, 0, num, crossB);
+    mainBuffer->addFrom(1, start, deckBChannel->processingBuffer, 1, 0, num, crossB);
+    
+    // 2.1 Mix HandsFree Deck (Direct to Master, not affected by crossfader)
+    mainBuffer->addFrom(0, start, handsFreeChannel->processingBuffer, 0, 0, num);
+    mainBuffer->addFrom(1, start, handsFreeChannel->processingBuffer, 1, 0, num);
+
+    // 3. Add Pads from Master Mixer
+    juce::AudioBuffer<float> padMixBuffer(2, num);
+    padMixBuffer.clear();
+    juce::AudioSourceChannelInfo padMixInfo(&padMixBuffer, 0, num);
+    mixer.getNextAudioBlock(padMixInfo);
+    
+    mainBuffer->addFrom(0, start, padMixBuffer, 0, 0, num);
+    mainBuffer->addFrom(1, start, padMixBuffer, 1, 0, num);
+
+    // 4. Master Volume
+    mainBuffer->applyGain(start, num, masterVolume);
 
     if (padRecorder.isRecording.load()) {
         const juce::ScopedLock sl (padRecorder.lock);
         if (padRecorder.writer != nullptr) {
-            // Se o usuário tem uma placa multicanal (ex: 8 canais), o mic pode estar no canal 3, 4, etc.
-            // Vamos somar todos os inputs disponíveis nos canais 0 e 1 do arquivo para garantir que gravamos o som.
             juce::AudioBuffer<float> tempRecordBuffer(2, num);
             tempRecordBuffer.clear();
-            
             int numIn = mainBuffer->getNumChannels();
             for (int ch = 0; ch < numIn; ++ch) {
                 tempRecordBuffer.addFrom(ch % 2, 0, *mainBuffer, ch, start, num);
             }
-            
             padRecorder.writer->writeFromAudioSampleBuffer(tempRecordBuffer, 0, num);
         }
     }
 
-    // 1. Mixer Original (Sempre som limpo por padrão)
-    mixer.getNextAudioBlock (bufferToFill);
-
-    // 2. Volume Master (Aplicado ao mix final: Track + Pads)
-    mainBuffer->applyGain(start, num, masterVolume);
-
-    // 3. Logica de Stems - Verifica se precisa chavear para o modo stems
     bool anyStemActive = false;
     for (int s = 0; s < NUM_STEMS; ++s) {
         if (stemGains[s].getNextValue() < 0.99f || stemGains[s].isSmoothing()) 
@@ -135,141 +276,17 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
                     float d = drumsBuffer.getSample(ch % drumsBuffer.getNumChannels(), (int)idx);
                     float b = bassBuffer.getSample(ch % bassBuffer.getNumChannels(), (int)idx);
                     
-                    // Soma dos Stems com Ganho Suave (Fase preservada pelo Demucs)
                     out[i] = (v * stemGains[0].getCurrentValue()) + 
                              (d * stemGains[1].getCurrentValue()) + 
                              (b * stemGains[2].getCurrentValue());
                 }
             }
         }
-        
-        // Avança o smoothing para o próximo bloco
-        for (int s = 0; s < NUM_STEMS; ++s) stemGains[s].skip(num);
     }
+    for (int s = 0; s < NUM_STEMS; ++s) stemGains[s].skip(num);
+    
+    currentPeakLevel.store(mainBuffer->getMagnitude(start, num));
 
-    // 4. Engine de Efeitos - Só processa se algum FX estiver ON e a música tocando
-    bool anyFx = false;
-    for (int f = 0; f < NUM_FX; ++f) if (fxProcessors[f].enabled) anyFx = true;
-
-    if (anyFx)
-    {
-        float lfoInc = juce::MathConstants<float>::twoPi * (0.35f / (float)currentSampleRate);
-
-        for (int ch = 0; ch < mainBuffer->getNumChannels(); ++ch) {
-            auto* data = mainBuffer->getWritePointer(ch, start);
-            auto* delayData = delayBuffer.getWritePointer(ch % delayBuffer.getNumChannels());
-            int localWritePos = writePos;
-            int chIdx = ch % 2;
-
-            for (int i = 0; i < num; ++i) {
-                float input = data[i];
-                float output = input;
-                lfoPhase += lfoInc;
-                if (lfoPhase > juce::MathConstants<float>::twoPi) lfoPhase -= juce::MathConstants<float>::twoPi;
-
-                // FX 0: Delay
-                if (fxProcessors[0].enabled) {
-                    int delayLen = (int)(currentSampleRate * 0.4);
-                    int rPos = (localWritePos - delayLen + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples();
-                    float delaySample = delayData[rPos];
-                    delayData[localWritePos] = juce::jlimit(-1.0f, 1.0f, input + delaySample * 0.45f * fxProcessors[0].amount);
-                    output = juce::jlimit(-1.0f, 1.0f, output + delaySample * fxProcessors[0].amount);
-                } else if (!fxProcessors[1].enabled && !fxProcessors[5].enabled) {
-                    delayData[localWritePos] = input; // Basic buffer update
-                }
-
-                // FX 1: Echo (Longer Tap)
-                if (fxProcessors[1].enabled) {
-                    int echoLen = (int)(currentSampleRate * 0.65);
-                    int rPos = (localWritePos - echoLen + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples();
-                    output = juce::jlimit(-1.0f, 1.0f, output + delayData[rPos] * fxProcessors[1].amount * 0.7f);
-                }
-
-                // FX 2: Reverb (3-Tap Comb Feedback)
-                if (fxProcessors[2].enabled) {
-                    int d1 = (int)(currentSampleRate * 0.027);
-                    int d2 = (int)(currentSampleRate * 0.035);
-                    int d3 = (int)(currentSampleRate * 0.041);
-                    float r1 = delayData[(localWritePos - d1 + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples()];
-                    float r2 = delayData[(localWritePos - d2 + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples()];
-                    float r3 = delayData[(localWritePos - d3 + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples()];
-                    output = juce::jlimit(-1.0f, 1.0f, output + (r1 + r2 + r3) * 0.4f * fxProcessors[2].amount);
-                }
-
-                // FX 3: Flange (Modulated Delay)
-                if (fxProcessors[3].enabled) {
-                    float mod = (1.0f + std::sin(lfoPhase)) * 140.0f; 
-                    int rPos = (localWritePos - (int)(120 + mod) + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples();
-                    output = (output + delayData[rPos] * fxProcessors[3].amount) * 0.7f;
-                }
-
-                // FX 4: Space (Pseudo-Stereo Depth)
-                if (fxProcessors[4].enabled) {
-                    int sLen = (int)(currentSampleRate * (chIdx == 0 ? 0.005 : 0.015)); // Offset L/R
-                    int rPos = (localWritePos - sLen + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples();
-                    output = output * (1.0f - fxProcessors[4].amount * 0.5f) + delayData[rPos] * fxProcessors[4].amount * 0.5f;
-                }
-
-                // FX 5: Dub Echo (High Saturation)
-                if (fxProcessors[5].enabled) {
-                    int dLen = (int)(currentSampleRate * 0.38);
-                    int rPos = (localWritePos - dLen + delayBuffer.getNumSamples()) % delayBuffer.getNumSamples();
-                    float fb = delayData[rPos];
-                    delayData[localWritePos] = std::tanh(input + fb * 0.78f * fxProcessors[5].amount);
-                    output = juce::jlimit(-1.0f, 1.0f, output + fb * fxProcessors[5].amount);
-                }
-
-                data[i] = output;
-                localWritePos = (localWritePos + 1) % delayBuffer.getNumSamples();
-            }
-            if (ch == mainBuffer->getNumChannels() - 1) writePos = localWritePos;
-        }
-    }
-
-    // 5. Pico para VU meter
-    float peak = 0.0f;
-    for (int ch = 0; ch < mainBuffer->getNumChannels(); ++ch) {
-        float mag = mainBuffer->getMagnitude(ch, start, num);
-        if (mag > peak) peak = mag;
-    }
-    currentPeakLevel.store(peak);
-    // 6. XY Filter (Mola Suite)
-    if (xyEnabled.load())
-    {
-        juce::dsp::AudioBlock<float> block(*mainBuffer);
-        juce::dsp::ProcessContextReplacing<float> context(block);
-
-        if (xyMode == XyMode::Ladder)
-        {
-            xyLpFilter.process(context);
-        }
-        else
-        {
-            // X-Axis: Flanger (Left) ou Echo (Right)
-            if (xyFlangerMix > 0.01f) {
-                xyFlanger.setMix(xyFlangerMix * 0.7f);
-                xyFlanger.process(context);
-            } else if (xyEchoMix > 0.01f) {
-                for (int ch = 0; ch < mainBuffer->getNumChannels(); ++ch) {
-                    auto* samples = mainBuffer->getWritePointer(ch, start);
-                    for (int i = 0; i < num; ++i) {
-                        float delayed = xyEcho.popSample(ch);
-                        xyEcho.pushSample(ch, samples[i] + delayed * 0.5f);
-                        samples[i] += delayed * xyEchoMix * 0.6f;
-                    }
-                }
-            }
-
-            // Y-Axis: HPF (Up) ou LPF (Down)
-            if (xyLpMix > 0.01f) {
-                xyLpFilter.process(context);
-            } else if (xyHpMix > 0.01f) {
-                xyHpFilter.process(context);
-            }
-        }
-    }
-
-    // Capture Master Recording (Final output AFTER all processing)
     if (masterRecorder.isRecording.load()) {
         const juce::ScopedLock sl(masterRecorder.lock);
         if (masterRecorder.writer != nullptr) {
@@ -277,6 +294,404 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
         }
     }
 }
+
+void AudioCore::processDeckDsp(juce::AudioBuffer<float>& buffer, DeckMixerState& dState, int numSamples)
+{
+    // 1. Apply EQ
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        int c = ch % 2;
+        if (dState.lowFilter[c] && dState.midFilter[c] && dState.highFilter[c]) {
+            float* d = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                d[i] = dState.lowFilter[c]->processSample(d[i]);
+                d[i] = dState.midFilter[c]->processSample(d[i]);
+                d[i] = dState.highFilter[c]->processSample(d[i]);
+            }
+        }
+    }
+
+    // 2. Apply 6-Slot FX
+    bool anyFx = false;
+    for (auto& slot : dState.fxSlots) if (slot.enabled) anyFx = true;
+
+    if (anyFx) {
+        float lfoInc = juce::MathConstants<float>::twoPi * (0.35f / (float)currentSampleRate);
+        int delaySize = dState.fxDelayBuffer.getNumSamples();
+        int numCh = buffer.getNumChannels();
+
+        for (int ch = 0; ch < numCh; ++ch) {
+            float* data = buffer.getWritePointer(ch);
+            float* delayData = dState.fxDelayBuffer.getWritePointer(ch % dState.fxDelayBuffer.getNumChannels());
+            int localWritePos = dState.fxWritePos;
+            float localLfo = dState.fxLfoPhase;
+
+            for (int i = 0; i < numSamples; ++i) {
+                float input = data[i];
+                float output = input;
+                localLfo += lfoInc;
+                if (localLfo > juce::MathConstants<float>::twoPi) localLfo -= juce::MathConstants<float>::twoPi;
+
+                float dInput = input;
+                if (dState.fxSlots[0].enabled) { // Delay
+                    int dLen = (int)(currentSampleRate * 0.4);
+                    float ds = delayData[(localWritePos - dLen + delaySize) % delaySize];
+                    dInput = juce::jlimit(-1.0f, 1.0f, input + ds * 0.45f * dState.fxSlots[0].amount);
+                    output = juce::jlimit(-1.0f, 1.0f, output + ds * dState.fxSlots[0].amount);
+                } else if (dState.fxSlots[1].enabled) { // Echo
+                    int eLen = (int)(currentSampleRate * 0.25);
+                    float ds = delayData[(localWritePos - eLen + delaySize) % delaySize];
+                    dInput = juce::jlimit(-1.0f, 1.0f, input + ds * 0.7f * dState.fxSlots[1].amount);
+                    output = juce::jlimit(-1.0f, 1.0f, output + ds * dState.fxSlots[1].amount * 0.6f);
+                } else if (dState.fxSlots[5].enabled) { // Dub Echo
+                    int dLen = (int)(currentSampleRate * 0.38);
+                    float ds = delayData[(localWritePos - dLen + delaySize) % delaySize];
+                    dInput = (float)std::tanh(input + ds * 0.78f * dState.fxSlots[5].amount);
+                    output = juce::jlimit(-1.0f, 1.0f, output + ds * dState.fxSlots[5].amount);
+                }
+                
+                delayData[localWritePos] = dInput;
+
+                if (dState.fxSlots[2].enabled) { // Reverb
+                    float r1 = delayData[(localWritePos - (int)(currentSampleRate*0.03) + delaySize) % delaySize];
+                    float r2 = delayData[(localWritePos - (int)(currentSampleRate*0.05) + delaySize) % delaySize];
+                    output = juce::jlimit(-1.0f, 1.0f, output + (r1 + r2) * 0.4f * dState.fxSlots[2].amount);
+                }
+
+                if (dState.fxSlots[3].enabled) { // Flange
+                    float mod = (1.0f + std::sin(localLfo)) * 140.0f;
+                    output = (output + delayData[(localWritePos - (int)(120 + mod) + delaySize) % delaySize] * dState.fxSlots[3].amount) * 0.7f;
+                }
+
+                if (dState.fxSlots[4].enabled) { // Space
+                    int sLen = (int)(currentSampleRate * (ch == 0 ? 0.005 : 0.015));
+                    output = output * (1.0f - dState.fxSlots[4].amount * 0.5f) + delayData[(localWritePos - sLen + delaySize) % delaySize] * dState.fxSlots[4].amount * 0.5f;
+                }
+
+                data[i] = output;
+                localWritePos = (localWritePos + 1) % delaySize;
+            }
+            if (ch == numCh - 1) {
+                dState.fxWritePos = localWritePos;
+                dState.fxLfoPhase = localLfo;
+            }
+        }
+    }
+
+    // 3. Apply XY Touch FX
+    if (dState.xyEnabled) {
+        juce::dsp::AudioBlock<float> block(buffer);
+        juce::dsp::ProcessContextReplacing<float> context(block);
+
+        if (dState.xyMode == XyMode::Ladder) {
+            dState.lpFilter.process(context);
+        } else {
+            if (dState.flangerMix > 0.01f) {
+                dState.flanger.setMix(dState.flangerMix * 0.7f);
+                dState.flanger.process(context);
+            } else if (dState.echoMix > 0.01f) {
+                for (int c = 0; c < buffer.getNumChannels(); ++c) {
+                    float* samples = buffer.getWritePointer(c);
+                    for (int j = 0; j < numSamples; ++j) {
+                        float delayed = dState.echo.popSample(c);
+                        dState.echo.pushSample(c, samples[j] + delayed * 0.5f);
+                        samples[j] += delayed * dState.echoMix * 0.6f;
+                    }
+                }
+            }
+
+            if (dState.lpMix > 0.01f) dState.lpFilter.process(context);
+            if (dState.hpMix > 0.01f) dState.hpFilter.process(context);
+        }
+    }
+}
+
+void AudioCore::handleSyncLogic() {
+    if (masterDeckIdx < 0) return;
+    
+    int slaveIdx = (masterDeckIdx == 0) ? 1 : 0;
+    if (!syncEnabled[slaveIdx]) return;
+    
+    double masterBpm = getDeckBpm(masterDeckIdx);
+    double slaveBaseBpm = (slaveIdx == 0) ? deckABpm : deckBBpm;
+    
+    if (masterBpm > 0 && slaveBaseBpm > 0) {
+        // 1. Continuous BPM Match
+        double targetPitch = (masterBpm / slaveBaseBpm - 1.0) / 0.06;
+        setDeckPitch(slaveIdx, targetPitch);
+        
+        // 2. Phase Sync (Beatmatch)
+        if (isDeckPlaying(masterDeckIdx) && isDeckPlaying(slaveIdx)) {
+            double masterPos = getDeckPosition(masterDeckIdx);
+            double slavePos = getDeckPosition(slaveIdx);
+            double beatDuration = 60.0 / masterBpm;
+            
+            double masterPhase = std::fmod(masterPos, beatDuration);
+            double slavePhase = std::fmod(slavePos, beatDuration);
+            
+            double phaseDiff = masterPhase - slavePhase;
+            if (phaseDiff > beatDuration * 0.5) phaseDiff -= beatDuration;
+            else if (phaseDiff < -beatDuration * 0.5) phaseDiff += beatDuration;
+            
+            // Only snap if drift is > 10ms to avoid constant jumping
+            if (std::abs(phaseDiff) > 0.01) {
+                if (slaveIdx == 0) seekDeckA(slavePos + phaseDiff);
+                else seekDeckB(slavePos + phaseDiff);
+            }
+        }
+    }
+}
+
+bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
+    if (!file.existsAsFile()) return false;
+    
+    // 1. Eject current track and reset state
+    deckAChannel->transport->stop();
+    deckAChannel->transport->setSource(nullptr);
+    deckAChannel->readerSource.reset();
+    thumbnail.clear(); // Clear old waveform immediately
+    deckACue = 0.0;
+    setDeckLoopEnabled(0, false);
+    deckAPitch = 0.0; // Reset pitch to neutral
+    
+    // 2. Load new track
+    auto* reader = formatManager.createReaderFor(file);
+    if (reader != nullptr) {
+        auto newSource = std::make_unique<CrossfadingLoopSource>(reader, true);
+        deckAChannel->transport->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+        deckAChannel->readerSource = std::move(newSource);
+        deckAName = file.getFileNameWithoutExtension();
+        if (bpm > 0.0) deckABpm = bpm;
+        else deckABpm = detectBpm(file);
+        mainTrackBpm = deckABpm;
+        thumbnail.setSource(new juce::FileInputSource(file));
+        asyncExtractStems(file);
+        return true;
+    }
+    return false;
+}
+
+bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
+    if (!file.existsAsFile()) return false;
+
+    // 1. Eject current track and reset state
+    deckBChannel->transport->stop();
+    deckBChannel->transport->setSource(nullptr);
+    deckBChannel->readerSource.reset();
+    thumbnailB.clear(); // Clear old waveform immediately
+    deckBCue = 0.0;
+    setDeckLoopEnabled(1, false);
+    deckBPitch = 0.0; // Reset pitch to neutral
+
+    // 2. Load new track
+    auto* reader = formatManager.createReaderFor(file);
+    if (reader != nullptr) {
+        auto newSource = std::make_unique<CrossfadingLoopSource>(reader, true);
+        deckBChannel->transport->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+        deckBChannel->readerSource = std::move(newSource);
+        deckBName = file.getFileNameWithoutExtension();
+        if (bpm > 0.0) deckBBpm = bpm;
+        else deckBBpm = detectBpm(file);
+        thumbnailB.setSource(new juce::FileInputSource(file));
+        return true;
+    }
+    return false;
+}
+
+bool AudioCore::loadHandsFreeDeck(const juce::File& file, double bpm) {
+    if (!file.existsAsFile()) return false;
+
+    // 1. Reset state
+    handsFreeChannel->transport->stop();
+    handsFreeChannel->transport->setSource(nullptr);
+    handsFreeChannel->readerSource.reset();
+    thumbnailH.clear(); // Clear old waveform immediately
+    deckHCue = 0.0;
+    setDeckLoopEnabled(2, false);
+    deckHPitch = 0.0;
+
+    // 2. Load new track
+    auto* reader = formatManager.createReaderFor(file);
+    if (reader != nullptr) {
+        auto newSource = std::make_unique<CrossfadingLoopSource>(reader, true);
+        handsFreeChannel->transport->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+        handsFreeChannel->readerSource = std::move(newSource);
+        deckHName = file.getFileNameWithoutExtension();
+        if (bpm > 0.0) deckHBpm = bpm;
+        else deckHBpm = detectBpm(file);
+        mainTrackBpm = deckHBpm;
+        thumbnailH.setSource(new juce::FileInputSource(file));
+        asyncExtractStems(file);
+        return true;
+    }
+    return false;
+}
+
+void AudioCore::playHandsFreeDeck() { handsFreeChannel->transport->start(); }
+void AudioCore::stopHandsFreeDeck() { handsFreeChannel->transport->stop(); }
+
+void AudioCore::triggerDeckCue (int deckIdx)
+{
+    auto* transport = (deckIdx == 0) ? deckAChannel->transport.get() : 
+                     (deckIdx == 1 ? deckBChannel->transport.get() : handsFreeChannel->transport.get());
+    
+    if (transport == nullptr) return;
+
+    double pos = transport->getCurrentPosition();
+    double len = transport->getLengthInSeconds();
+
+    // 1. If at the end of the track, always reset to the very beginning
+    if (pos >= len - 0.1) {
+        transport->stop();
+        transport->setPosition(0.0);
+        return;
+    }
+
+    if (transport->isPlaying()) {
+        // 2. If playing, mark the current point as the new CUE and stop
+        double markPos = pos;
+        if (deckIdx == 0) deckACue = markPos;
+        else if (deckIdx == 1) deckBCue = markPos;
+        else deckHCue = markPos;
+        
+        transport->stop();
+        transport->setPosition(markPos);
+    } else {
+        // 3. If paused/stopped, jump to the last marked CUE point
+        double cuePos = getDeckCuePoint(deckIdx);
+        transport->setPosition(cuePos);
+    }
+}
+
+void AudioCore::seekHandsFreeDeck(double pos) { handsFreeChannel->transport->setPosition(pos); }
+void AudioCore::ejectHandsFreeDeck() { handsFreeChannel->transport->stop(); handsFreeChannel->transport->setSource(nullptr); handsFreeChannel->readerSource.reset(); }
+
+
+
+void AudioCore::playDeckA() { 
+    if (masterDeckIdx == -1) masterDeckIdx = 0;
+    deckAChannel->transport->start(); 
+}
+void AudioCore::stopDeckA() { deckAChannel->transport->stop(); }
+void AudioCore::seekDeckA(double pos) { deckAChannel->transport->setPosition(pos); }
+void AudioCore::ejectDeckA() { 
+    deckAChannel->transport->stop(); 
+    deckAChannel->transport->setSource(nullptr); 
+    deckAChannel->readerSource.reset(); 
+    deckAName = ""; 
+    thumbnail.clear(); 
+    deckACue = 0.0;
+}
+
+void AudioCore::playDeckB() { 
+    if (masterDeckIdx == -1) masterDeckIdx = 1;
+    deckBChannel->transport->start(); 
+}
+void AudioCore::stopDeckB() { deckBChannel->transport->stop(); }
+void AudioCore::seekDeckB(double pos) { deckBChannel->transport->setPosition(pos); }
+void AudioCore::ejectDeckB() { 
+    deckBChannel->transport->stop(); 
+    deckBChannel->transport->setSource(nullptr); 
+    deckBChannel->readerSource.reset(); 
+    deckBName = ""; 
+    thumbnailB.clear(); 
+    deckBCue = 0.0;
+}
+
+double AudioCore::getDeckPosition (int deckIdx) const {
+    if (deckIdx == 0) return deckAChannel->transport->getCurrentPosition();
+    if (deckIdx == 1) return deckBChannel->transport->getCurrentPosition();
+    return handsFreeChannel->transport->getCurrentPosition();
+}
+
+double AudioCore::getDeckLength (int deckIdx) const {
+    if (deckIdx == 0) return deckAChannel->transport->getLengthInSeconds();
+    if (deckIdx == 1) return deckBChannel->transport->getLengthInSeconds();
+    return handsFreeChannel->transport->getLengthInSeconds();
+}
+
+bool AudioCore::isDeckPlaying (int deckIdx) const {
+    if (deckIdx == 0) return deckAChannel->transport->isPlaying();
+    if (deckIdx == 1) return deckBChannel->transport->isPlaying();
+    return handsFreeChannel->transport->isPlaying();
+}
+
+double AudioCore::getMainTrackPosition() const { return getDeckPosition(2); }
+double AudioCore::getMainTrackLength() const { return getDeckLength(2); }
+bool AudioCore::isMainTrackPlaying() const { return isDeckPlaying(2); }
+
+void AudioCore::setMainTrackLoopRange(double startTime, double duration) {
+    if (handsFreeChannel && handsFreeChannel->readerSource) {
+        if (startTime <= 0) startTime = handsFreeChannel->transport->getCurrentPosition();
+        handsFreeChannel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
+    }
+}
+
+void AudioCore::setMainTrackLoopEnabled(bool enabled) {
+    if (handsFreeChannel && handsFreeChannel->readerSource)
+        handsFreeChannel->readerSource->setLooping(enabled);
+}
+
+bool AudioCore::isMainTrackLoopEnabled() const {
+    if (handsFreeChannel && handsFreeChannel->readerSource)
+        return handsFreeChannel->readerSource->isLooping();
+    return false;
+}
+
+void AudioCore::setDeckLoopRange(int deckIdx, double startTime, double duration) {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource) {
+        if (startTime <= 0) startTime = channel->transport->getCurrentPosition();
+        channel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
+    }
+}
+
+void AudioCore::setDeckLoopEnabled(int deckIdx, bool enabled) {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource)
+        channel->readerSource->setLooping(enabled);
+}
+
+bool AudioCore::isDeckLoopEnabled(int deckIdx) const {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource)
+        return channel->readerSource->isLooping();
+    return false;
+}
+
+double AudioCore::getDeckLoopStart(int deckIdx) const {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource)
+        return (double)channel->readerSource->getLoopStart() / currentSampleRate;
+    return 0.0;
+}
+
+double AudioCore::getDeckLoopLength(int deckIdx) const {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource)
+        return (double)channel->readerSource->getLoopLength() / currentSampleRate;
+    return 0.0;
+}
+
 
 void AudioCore::asyncExtractStems(const juce::File& file)
 {
@@ -347,6 +762,40 @@ void AudioCore::asyncExtractStems(const juce::File& file)
 void AudioCore::releaseResources()
 {
     mixer.releaseResources();
+}
+
+void AudioCore::setGlobalPitchRatio(double ratio) {
+    setDeckPitch(2, ratio);
+}
+
+void AudioCore::setDeckPitch(int deckIdx, double pitch) {
+    if (deckIdx == 0) deckAPitch = pitch;
+    else if (deckIdx == 1) deckBPitch = pitch;
+    else if (deckIdx == 2) deckHPitch = pitch;
+
+    double speed = 1.0 + (pitch * 0.06);
+    
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else if (deckIdx == 2) channel = handsFreeChannel.get();
+
+    if (channel && channel->resampler)
+        channel->resampler->setResamplingRatio(speed); 
+
+    // If it's the global pitch (deck 2), also update all pads
+    if (deckIdx == 2) {
+        for (auto& pc : padChannels) {
+            if (pc && pc->resampler)
+                pc->resampler->setResamplingRatio(speed);
+        }
+    }
+}
+
+double AudioCore::getDeckPitch(int deckIdx) const {
+    if (deckIdx == 0) return deckAPitch;
+    if (deckIdx == 1) return deckBPitch;
+    return deckHPitch;
 }
 
 // -------------------------------------------------------------
@@ -424,6 +873,9 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
             
             readerSource->setNextReadPosition(start + offset + samplesToProcess);
 
+            // Note: Hook to signal cue point reach
+            // audioCore.setDeckCuePoint(2, 0.0);
+
             for (int chan = 0; chan < bufferToFill.buffer->getNumChannels(); ++chan)
             {
                 auto* dst = bufferToFill.buffer->getWritePointer(chan, dstStart);
@@ -451,189 +903,65 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
 }
 // -------------------------------------------------------------
 
-bool AudioCore::loadMainTrack (const juce::File& file, double bpm)
-{
-    if (!file.existsAsFile()) return false;
-    auto* reader = formatManager.createReaderFor (file);
-    if (reader != nullptr)
-    {
-        auto newSource = std::make_unique<CrossfadingLoopSource> (reader, true);
-        mainTrackChannel->transport->setSource (newSource.get(), 0, nullptr, reader->sampleRate);
-        mainTrackChannel->readerSource = std::move (newSource);
-        
-        if (bpm > 0.0)
-            mainTrackBpm = bpm;
-        else
-            mainTrackBpm = detectBpm(file);
 
-        thumbnail.setSource(new juce::FileInputSource(file));
-        
-        // Start background stem extraction
-        asyncExtractStems(file);
-        
-        return true;
-    }
+void AudioCore::setFxEnabled(int deckIdx, int fxIndex, bool enabled) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (fxIndex >= 0 && fxIndex < 6) state.fxSlots[fxIndex].enabled = enabled;
+}
+
+void AudioCore::setFxAmount(int deckIdx, int fxIndex, float amount) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (fxIndex >= 0 && fxIndex < 6) state.fxSlots[fxIndex].amount = amount;
+}
+
+bool AudioCore::isFxEnabled(int deckIdx, int fxIndex) const {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (fxIndex >= 0 && fxIndex < 6) return state.fxSlots[fxIndex].enabled;
     return false;
 }
 
-void AudioCore::playMainTrack()
-{
-    mainTrackChannel->transport->start();
+float AudioCore::getFxAmount(int deckIdx, int fxIndex) const {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    if (fxIndex >= 0 && fxIndex < 6) return state.fxSlots[fxIndex].amount;
+    return 0.5f;
 }
 
-void AudioCore::stopMainTrack()
-{
-    mainTrackChannel->transport->stop();
+void AudioCore::setXyMode(int deckIdx, XyMode m) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    state.xyMode = m;
 }
 
-double AudioCore::getMainTrackPosition() const
-{
-    return mainTrackChannel->transport->getCurrentPosition();
-}
-
-double AudioCore::getMainTrackLength() const
-{
-    return mainTrackChannel->transport->getLengthInSeconds();
-}
-
-bool AudioCore::isMainTrackPlaying() const
-{
-    return mainTrackChannel->transport->isPlaying();
-}
-
-void AudioCore::seekMainTrack(double positionSeconds)
-{
-    mainTrackChannel->transport->setPosition(positionSeconds);
-}
-
-void AudioCore::ejectMainTrack()
-{
-    mainTrackChannel->transport->stop();
-    mainTrackChannel->transport->setSource(nullptr);
-    mainTrackChannel->readerSource.reset();
-    thumbnail.clear();
+void AudioCore::setXyFilter(int deckIdx, float x, float y) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    state.curX = x; state.curY = y;
     
-    // Reset states to avoid hiss/glitches
-    delayBuffer.clear();
-    stemsAreReady = false;
-    reverbState[0] = 0.0f;
-    reverbState[1] = 0.0f;
-    for(int s=0; s<NUM_STEMS; ++s) stemMuted[s] = false;
-}
+    if (state.xyMode == XyMode::Ladder) {
+        float cutoff = 20.0f * std::pow(1000.0f, x); 
+        state.lpFilter.setCutoffFrequencyHz(cutoff);
+        state.lpFilter.setResonance(y * 0.85f);
+        state.lpMix = 1.0f;
+    } else {
+        if (x < 0.48f) { state.flangerMix = (0.5f - x) * 2.0f; state.echoMix = 0.0f; }
+        else if (x > 0.52f) { state.echoMix = (x - 0.5f) * 2.0f; state.flangerMix = 0.0f; }
+        else { state.flangerMix = 0.0f; state.echoMix = 0.0f; }
 
-void AudioCore::setMainTrackLoopRange(double startTime, double duration) {
-    if (mainTrackChannel && mainTrackChannel->readerSource) {
-        if (startTime <= 0) startTime = mainTrackChannel->transport->getCurrentPosition();
-        mainTrackChannel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
-    }
-}
-
-void AudioCore::setMainTrackLoopEnabled(bool enabled) {
-    if (mainTrackChannel && mainTrackChannel->readerSource)
-        mainTrackChannel->readerSource->setLooping(enabled);
-}
-
-bool AudioCore::isMainTrackLoopEnabled() const {
-    if (mainTrackChannel && mainTrackChannel->readerSource)
-        return mainTrackChannel->readerSource->isLooping();
-    return false;
-}
-
-void AudioCore::setFxEnabled(int fxIndex, bool enabled)
-{
-    if (fxIndex >= 0 && fxIndex < NUM_FX)
-        fxProcessors[fxIndex].enabled = enabled;
-}
-
-void AudioCore::setFxAmount(int fxIndex, float amount)
-{
-    if (fxIndex >= 0 && fxIndex < NUM_FX)
-        fxProcessors[fxIndex].amount = amount;
-}
-
-bool AudioCore::isFxEnabled(int fxIndex) const
-{
-    if (fxIndex >= 0 && fxIndex < NUM_FX)
-        return fxProcessors[fxIndex].enabled;
-    return false;
-}
-
-void AudioCore::setXyMode(XyMode mode)
-{
-    xyMode = mode;
-    // Reset Total
-    xyFlangerMix = 0.0f;
-    xyEchoMix = 0.0f;
-    xyLpMix = 0.0f;
-    xyHpMix = 0.0f;
-    xyLpFilter.setResonance(0.0f);
-    xyLpFilter.setCutoffFrequencyHz(20000.0f);
-}
-
-void AudioCore::setXyFilter(float x, float y)
-{
-    if (xyMode == XyMode::Ladder)
-    {
-        // X -> Cutoff (20Hz a 18kHz)
-        float cutoff = 20.0f * std::pow(900.0f, x);
-        xyLpFilter.setCutoffFrequencyHz(cutoff);
-        // Y -> Resonance (0.0 a 0.85)
-        xyLpFilter.setResonance(y * 0.85f);
-        xyLpMix = 1.0f;
-    }
-    else
-    {
-        // X -> Flanger (Left) ou Echo (Right)
-        if (x < 0.48f) {
-            xyFlangerMix = (0.5f - x) * 2.0f;
-            xyEchoMix = 0.0f;
-        } else if (x > 0.52f) {
-            xyEchoMix = (x - 0.5f) * 2.0f;
-            xyFlangerMix = 0.0f;
-        } else {
-            xyFlangerMix = 0.0f;
-            xyEchoMix = 0.0f;
-        }
-
-        // Y -> LPF (Down) ou HPF (Up)
         if (y < 0.48f) {
-            xyLpMix = (0.5f - y) * 2.0f;
-            xyHpMix = 0.0f;
-            float cutoff = 20000.0f * std::pow(0.015f, xyLpMix); 
-            xyLpFilter.setCutoffFrequencyHz(cutoff);
-            xyLpFilter.setResonance(0.0f);
+            state.lpMix = (0.5f - y) * 2.0f; state.hpMix = 0.0f;
+            float cutoff = 20000.0f * std::pow(0.015f, state.lpMix); 
+            state.lpFilter.setCutoffFrequencyHz(cutoff);
         } else if (y > 0.52f) {
-            xyHpMix = (y - 0.5f) * 2.0f;
-            xyLpMix = 0.0f;
-            float cutoff = 20.0f * std::pow(200.0f, xyHpMix); 
-            xyHpFilter.setCutoffFrequencyHz(cutoff);
-        } else {
-            xyLpMix = 0.0f;
-            xyHpMix = 0.0f;
-        }
+            state.hpMix = (y - 0.5f) * 2.0f; state.lpMix = 0.0f;
+            float cutoff = 20.0f * std::pow(200.0f, state.hpMix); 
+            state.hpFilter.setCutoffFrequencyHz(cutoff);
+        } else { state.lpMix = 0.0f; state.hpMix = 0.0f; }
     }
 }
 
-void AudioCore::setXyFilterEnabled(bool enabled)
-{
-    xyEnabled.store(enabled);
+void AudioCore::setXyFilterEnabled(int deckIdx, bool enabled) {
+    auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
+    state.xyEnabled = enabled;
 }
 
-void AudioCore::setGlobalPitchRatio(double val)
-{
-    val = juce::jlimit(-1.0, 1.0, val);
-    if (std::abs(val - pitchValue) < 0.0001) return; // Ignore tiny changes
-    
-    pitchValue = val;
-    double speedFactor = 1.0 + (pitchValue * 0.06);
-    double ratio = speedFactor; // Higher ratio = more input samples consumed = faster
-    
-    mainTrackChannel->resampler->setResamplingRatio(ratio);
-    for (auto& pc : padChannels) {
-        if (pc && pc->resampler)
-            pc->resampler->setResamplingRatio(ratio);
-    }
-}
 
 bool AudioCore::loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop)
 {
@@ -708,8 +1036,8 @@ void AudioCore::setMasterVolume (float volume)
 void AudioCore::setTrackVolume(float volume)
 {
     trackVolume = volume;
-    if (mainTrackChannel && mainTrackChannel->transport)
-        mainTrackChannel->transport->setGain(volume);
+    if (deckAChannel && deckAChannel->transport)
+        deckAChannel->transport->setGain(volume);
 }
 
 void AudioCore::setPadVolume (int padIndex, float gain)

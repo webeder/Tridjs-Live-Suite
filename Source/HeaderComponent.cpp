@@ -1,6 +1,9 @@
 #include "HeaderComponent.h"
+#include "AudioCore.h"
 
-HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay(thumb)
+HeaderComponent::HeaderComponent (AudioCore& engine) 
+    : audioCore(engine),
+      waveformDisplay(engine)
 {
     addAndMakeVisible(waveformDisplay);
     waveformDisplay.onSeekToPosition = [this](double posSeconds) {
@@ -13,10 +16,7 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
         if (waveformDisplay.isPlaying) {
             if (onStop) onStop();
         } else {
-            // If CUE is set and we're stopped, play from CUE point
-            if (waveformDisplay.cuePoint > 0.0) {
-                if (onSeek) onSeek(waveformDisplay.cuePoint);
-            }
+            // If stopped and we click play, just start
             if (onPlay) onPlay();
         }
     };
@@ -26,7 +26,7 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     ejectButton.onClick = [this] {
         waveformDisplay.loadedTrackName = "";
         waveformDisplay.currentPos = 0.0;
-        waveformDisplay.cuePoint = 0.0;
+        audioCore.setDeckCuePoint(2, 0.0);
         waveformDisplay.isPlaying = false;
         waveformDisplay.repaint();
         if (onEject) onEject();
@@ -36,11 +36,11 @@ HeaderComponent::HeaderComponent (juce::AudioThumbnail& thumb) : waveformDisplay
     cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xffffa500));
     cueBtn.onClick = [this] {
         if (waveformDisplay.isPlaying) {
-            // While playing: save current pos as cue
-            waveformDisplay.cuePoint = waveformDisplay.currentPos;
+            // While playing: set CUE
+            audioCore.setDeckCuePoint(2, waveformDisplay.currentPos);
         } else {
-            // While stopped: seek to cue point
-            if (onSeek) onSeek(waveformDisplay.cuePoint);
+            // While stopped: trigger CUE
+            audioCore.triggerDeckCue(2);
         }
         repaint();
     };
@@ -267,8 +267,13 @@ void HeaderComponent::VuMeter::paint(juce::Graphics& g)
 // WaveformDisplay
 // ---------------------------------------------------------------
 
-HeaderComponent::WaveformDisplay::WaveformDisplay (juce::AudioThumbnail& thumb) : thumbnail (thumb) {
+HeaderComponent::WaveformDisplay::WaveformDisplay (AudioCore& engine) 
+    : audioCore(engine),
+      thumbnail(engine.getThumbnail(2)) 
+{
     formatManager.registerBasicFormats();
+    // Register to be notified when the thumbnail is updated (new track loaded)
+    thumbnail.addChangeListener(this);
     addAndMakeVisible(zoomInBtn);
     addAndMakeVisible(zoomOutBtn);
     zoomInBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x33ffffff));
@@ -288,6 +293,11 @@ HeaderComponent::WaveformDisplay::WaveformDisplay (juce::AudioThumbnail& thumb) 
     timeOverlay.setInterceptsMouseClicks(false, false);
     timeOverlay.setBorderSize(juce::BorderSize<int>(0));
     addAndMakeVisible(timeOverlay);
+}
+
+HeaderComponent::WaveformDisplay::~WaveformDisplay()
+{
+    thumbnail.removeChangeListener(this);
 }
 void HeaderComponent::WaveformDisplay::setLoopVisual(double start, double duration, bool active) {
     loopStart = start;
@@ -407,8 +417,11 @@ void HeaderComponent::WaveformDisplay::generateRgbWaveform (const juce::File& fi
             // Periodically check if we should abort? (Optional)
         }
 
-        juce::MessageManager::callAsync([this, data = std::move(tempSpectralData)]() mutable {
+        juce::MessageManager::callAsync([this, data = std::move(tempSpectralData), sr = sampleRate, np = numSamples]() mutable {
             spectralData = std::move(data);
+            // Update trackLength from analysis if not already set by transport
+            if (trackLength <= 0.0 && sr > 0)
+                trackLength = (double)np / sr;
             isAnalyzing = false;
             repaint();
         });
@@ -434,18 +447,24 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
     {
         const float yCenter = height * 0.5f;
 
-        double visibleDuration = (trackLength > 0) ? (trackLength / zoomFactor) : 10.0;
+        // Derive effective track length from spectral data if transport hasn't updated yet
+        const int pointsPerSec = 50;
+        double effectiveLength = trackLength;
+        if (effectiveLength <= 0.0 && !spectralData.empty())
+            effectiveLength = (double)spectralData.size() / (double)pointsPerSec;
+
+        double visibleDuration = (effectiveLength > 0) ? (effectiveLength / zoomFactor) : 10.0;
         double startTime = currentPos - (visibleDuration * 0.5);
         double endTime = currentPos + (visibleDuration * 0.5);
 
         if (zoomFactor <= 1.01) {
             startTime = 0;
-            endTime = trackLength;
-            visibleDuration = trackLength;
+            endTime = effectiveLength;
+            visibleDuration = effectiveLength;
         }
 
         const double duration = endTime - startTime;
-        const int pointsPerSec = 50;
+
         
         const float vGainL = 2.8f; 
         const float vGainM = 4.1f; 
@@ -461,7 +480,8 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         for (int x = 0; x < waveformLimit; x += step)
         {
             double timeAtX = startTime + ((double)x / width) * duration;
-            if (timeAtX < 0 || timeAtX > trackLength) continue;
+            if (timeAtX < 0 || timeAtX > effectiveLength) continue;
+
 
             int spectralIdx = (int)(timeAtX * pointsPerSec);
             
@@ -502,6 +522,7 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
         // --- CUE e Playhead ---
         const float clipLimit = width * 0.94f;
 
+        double cuePoint = audioCore.getDeckCuePoint(2);
         if (cuePoint >= startTime && cuePoint <= endTime) {
             auto cueX = ((cuePoint - startTime) / duration) * width;
             if (cueX < clipLimit) {
@@ -580,7 +601,12 @@ void HeaderComponent::WaveformDisplay::mouseDown (const juce::MouseEvent& e)
     if (zoomInBtn.getBounds().contains(e.getPosition()) || zoomOutBtn.getBounds().contains(e.getPosition()))
         return;
 
-    double visibleDuration = (trackLength > 0) ? (trackLength / zoomFactor) : 0.0;
+    const int pointsPerSec = 50;
+    double effectiveLength = trackLength;
+    if (effectiveLength <= 0.0 && !spectralData.empty())
+        effectiveLength = (double)spectralData.size() / (double)pointsPerSec;
+
+    double visibleDuration = (effectiveLength > 0) ? (effectiveLength / zoomFactor) : 0.0;
     double startTime = currentPos - (visibleDuration * 0.5);
     
     if (zoomFactor <= 1.01) startTime = 0;
@@ -588,10 +614,16 @@ void HeaderComponent::WaveformDisplay::mouseDown (const juce::MouseEvent& e)
     double clickRatio = (double)e.x / (double)getWidth();
     double seekPos = startTime + (clickRatio * visibleDuration);
     
-    seekPos = juce::jlimit(0.0, trackLength, seekPos);
+    seekPos = juce::jlimit(0.0, effectiveLength, seekPos);
     
     if (onSeekToPosition)
         onSeekToPosition(seekPos);
+
+    // Se estiver parado, clicar também marca o ponto de CUE
+    if (!isPlaying) {
+        audioCore.setDeckCuePoint(2, seekPos);
+        repaint();
+    }
 }
 
 // ---------------------------------------------------------------
@@ -699,7 +731,7 @@ void HeaderComponent::filesDropped(const juce::StringArray& files, int, int)
         if (file.endsWithIgnoreCase(".wav") || file.endsWithIgnoreCase(".mp3")) {
             juce::File f(file);
             waveformDisplay.loadedTrackName = f.getFileNameWithoutExtension();
-            waveformDisplay.cuePoint = 0.0;
+            audioCore.setDeckCuePoint(2, 0.0);
             waveformDisplay.generateRgbWaveform(f);
             waveformDisplay.repaint();
             if (onFileDropped) onFileDropped(f);
@@ -727,6 +759,11 @@ void HeaderComponent::fileDragExit(const juce::StringArray&)
 bool HeaderComponent::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
     juce::String desc = details.description.toString();
+    // Handle both: single absolute path, or pipe-separated paths from TrackBrowserComponent
+    if (desc.contains("|")) {
+        auto firstPath = desc.upToFirstOccurrenceOf("|", false, false).trim();
+        return juce::File::isAbsolutePath(firstPath);
+    }
     return desc == "AudioFileSelected" || juce::File::isAbsolutePath(desc);
 }
 
@@ -742,15 +779,19 @@ void HeaderComponent::itemDropped(const juce::DragAndDropTarget::SourceDetails& 
     else
     {
         juce::String desc = details.description.toString();
-        if (juce::File::isAbsolutePath(desc))
-            fileToLoad = juce::File(desc);
+        // Handle pipe-separated paths from TrackBrowserComponent
+        juce::String firstPath = desc.contains("|")
+            ? desc.upToFirstOccurrenceOf("|", false, false).trim()
+            : desc.trim();
+        if (juce::File::isAbsolutePath(firstPath))
+            fileToLoad = juce::File(firstPath);
     }
 
     if (fileToLoad.existsAsFile())
     {
         waveformDisplay.loadedTrackName = fileToLoad.getFileNameWithoutExtension();
         waveformDisplay.isPlaying = false;
-        waveformDisplay.cuePoint = 0.0;
+        audioCore.setDeckCuePoint(2, 0.0);
         waveformDisplay.generateRgbWaveform(fileToLoad);
         if (onFileDropped) onFileDropped(fileToLoad);
     }

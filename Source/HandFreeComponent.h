@@ -34,8 +34,8 @@ public:
     void mouseDown(const juce::MouseEvent&) override { if (onClick) onClick(); }
     
     void setContent(juce::Component* content) { 
-        browserContainer.reset(content); 
-        if (browserContainer) addAndMakeVisible(browserContainer.get());
+        browserContainer = content; 
+        if (browserContainer) addAndMakeVisible(browserContainer);
         resized();
     }
     
@@ -43,20 +43,22 @@ public:
         if (browserContainer) {
             auto area = getLocalBounds();
             area.removeFromTop(25); // Drag bar space
-            browserContainer->setBounds(area);
+            if (browserContainer && browserContainer->getParentComponent() == this)
+                browserContainer->setBounds(area);
         }
     }
 
     std::function<void()> onClick;
 
 private:
-    std::unique_ptr<juce::Component> browserContainer;
+    juce::Component* browserContainer = nullptr;
 };
 
 class HandFreeComponent : public juce::Component, private juce::Timer
 {
 public:
-    HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, juce::AudioDeviceManager& deviceManager);
+    HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, 
+                      juce::AudioDeviceManager& deviceManager, TrackBrowserComponent* browser);
     ~HandFreeComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -68,7 +70,6 @@ public:
 
     void setExpanded(bool expanded);
     bool isExpanded() const { return panelExpanded; }
-    TrackDatabase& getTrackDatabase() { return trackDb; }
 
     // Callbacks ou métodos para expor funcionalidades ao MainComponent se necessário
     std::function<void()> onResetPitchRequested;
@@ -85,9 +86,7 @@ public:
     SideBrowserComponent sideBrowser;
     BottomPanelComponent bottomPanel;
     
-    // Data & Analysis
-    TrackDatabase trackDb;
-    AnalysisManager analysisManager;
+    // Data (Now managed by MainComponent)
     TrackBrowserComponent* browserPtr = nullptr;
     
     // Middle Pitch

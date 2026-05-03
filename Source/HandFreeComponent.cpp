@@ -1,16 +1,16 @@
 #include "HandFreeComponent.h"
 
-HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, juce::AudioDeviceManager& deviceManager)
+HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, 
+                                   juce::AudioDeviceManager& deviceManager, TrackBrowserComponent* browser)
     : audioEngine(engine),
       inputManager(input),
       rgbManager(rgb),
-      header(engine.getThumbnail()),
+      header(engine),
       fxRack(deviceManager),
-      analysisManager(trackDb)
+      browserPtr(browser)
 {
-    auto browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager);
-    browserPtr = browser.get();
-    bottomPanel.setContent(browser.release()); 
+    if (browserPtr)
+        bottomPanel.setContent(browserPtr);
     
     // 1. Setup the callbacks first
     fxRack.onExpandedChanged = [this](bool expanded) {

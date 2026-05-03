@@ -17,6 +17,10 @@
 #include "PersistenceManager.h"
 #include "InputManager.h"
 #include "RgbManager.h"
+#include "MixerComponent.h"
+#include "TrackDatabase.h"
+#include "AnalysisManager.h"
+#include "TrackBrowserComponent.h"
 
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
@@ -78,6 +82,11 @@ private:
     AudioCore audioEngine;
     PersistenceManager persistence;
     
+    // Data & Analysis (Shared)
+    TrackDatabase trackDb;
+    AnalysisManager analysisManager { trackDb };
+    std::unique_ptr<TrackBrowserComponent> browser;
+
     // UI Layouts
     enum class LayoutMode { HandFree, Mixer };
     LayoutMode currentMode = LayoutMode::HandFree;
@@ -88,19 +97,7 @@ private:
     // I'll use the external HandFreeComponent
     std::unique_ptr<class HandFreeComponent> handFreeComp;
     
-    struct MixerPlaceholder : public juce::Component {
-        MixerPlaceholder() {
-            addAndMakeVisible(label);
-            label.setText("DJ MIXER - EM BREVE", juce::dontSendNotification);
-            label.setJustificationType(juce::Justification::centred);
-            label.setFont(juce::Font(24.0f, juce::Font::bold));
-            label.setColour(juce::Label::textColourId, juce::Colours::grey);
-        }
-        void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::black.withAlpha(0.8f)); }
-        void resized() override { label.setBounds(getLocalBounds()); }
-        juce::Label label;
-    };
-    MixerPlaceholder mixerPlaceholder;
+    std::unique_ptr<MixerComponent> mixerComp;
 
     // Input Management
     InputManager inputManager;

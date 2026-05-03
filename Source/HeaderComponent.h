@@ -4,13 +4,15 @@
 #include <functional>
 #include <algorithm>
 
+class AudioCore; // Forward declaration
+
 class HeaderComponent : public juce::Component,
                         public juce::DragAndDropTarget,
                         public juce::FileDragAndDropTarget,
                         public juce::Timer
 {
 public:
-    HeaderComponent (juce::AudioThumbnail& thumb);
+    HeaderComponent (AudioCore& engine);
     ~HeaderComponent() override;
 
     void paint (juce::Graphics&) override;
@@ -49,12 +51,13 @@ public:
     void itemDragEnter(const juce::DragAndDropTarget::SourceDetails& details) override;
     void itemDragExit(const juce::DragAndDropTarget::SourceDetails& details) override;
 
-private:
     // Waveform with click-to-seek
-    class WaveformDisplay : public juce::Component
+    class WaveformDisplay : public juce::Component,
+                            private juce::ChangeListener
     {
     public:
-        WaveformDisplay (juce::AudioThumbnail& thumb);
+        WaveformDisplay (AudioCore& engine);
+        ~WaveformDisplay() override;
         void paint (juce::Graphics& g) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent& e) override;
@@ -71,7 +74,6 @@ private:
         bool isDraggingOver = false;
         bool isPlaying = false;
         double trackLength = 0.0;
-        double cuePoint = 0.0;
         double currentPos = 0.0;
         double zoomFactor = 1.0; 
         
@@ -89,11 +91,13 @@ private:
         std::function<void(double)> onSeekToPosition;
 
     private:
+        void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
         struct SpectralPoint { float low, mid, high; };
         std::vector<SpectralPoint> spectralData;
         std::vector<SpectralPoint> nextSpectralData; // For background loading
         std::atomic<bool> isAnalyzing { false };
         
+        AudioCore& audioCore;
         juce::AudioThumbnail& thumbnail;
         juce::Image waveformImage;
         juce::AudioFormatManager formatManager;
@@ -103,6 +107,7 @@ private:
     };
     WaveformDisplay waveformDisplay;
 
+private:
     // VU Meter (painted manually)
     class VuMeter : public juce::Component
     {
@@ -147,6 +152,8 @@ private:
     juce::Label recordDuration { {}, "00:00:00" };
     bool isRecording = false;
     juce::uint32 recordStartTime = 0;
+
+    AudioCore& audioCore;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderComponent)
 };

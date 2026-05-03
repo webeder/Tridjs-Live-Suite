@@ -6,12 +6,16 @@ MainComponent::MainComponent()
     setLookAndFeel (&customTheme);
     juce::LookAndFeel::setDefaultLookAndFeel(&customTheme);
     
+    // Initialize Data
+    browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager);
+
     // Initialize HandFree Layout
-    handFreeComp = std::make_unique<HandFreeComponent>(audioEngine, inputManager, rgbManager, deviceManager);
+    handFreeComp = std::make_unique<HandFreeComponent>(audioEngine, inputManager, rgbManager, deviceManager, browser.get());
     addAndMakeVisible(handFreeComp.get());
     
-    // Initialize Mixer Placeholder (hidden by default)
-    addChildComponent(mixerPlaceholder);
+    // Initialize Mixer Layout (hidden by default)
+    mixerComp = std::make_unique<MixerComponent>(audioEngine, browser.get());
+    addChildComponent(mixerComp.get());
 
     // Setup MenuBar
     menuBar = std::make_unique<juce::MenuBarComponent>(this);
@@ -207,17 +211,17 @@ MainComponent::MainComponent()
 
   // Wire FX Rack
   handFreeComp->fxRack.onFxToggled = [this](int idx, bool on) { 
-      audioEngine.setFxEnabled(idx, on); 
+      audioEngine.setFxEnabled(2, idx, on); 
       rgbManager.triggerRgb(rgbManager.getFxMapping(idx), on);
   };
-  handFreeComp->fxRack.onFxAmountChanged = [this](int idx, float amt) { audioEngine.setFxAmount(idx, amt); };
+  handFreeComp->fxRack.onFxAmountChanged = [this](int idx, float amt) { audioEngine.setFxAmount(2, idx, amt); };
 
   // Wire XY Pad
   handFreeComp->fxRack.touchTabContent.touchPad.onXyChanged = [this](float x, float y) {
-      audioEngine.setXyFilter(x, y);
+      audioEngine.setXyFilter(2, x, y);
   };
   handFreeComp->fxRack.touchTabContent.touchPad.onActiveChanged = [this](bool active) {
-      audioEngine.setXyFilterEnabled(active);
+      audioEngine.setXyFilterEnabled(2, active);
   };
   handFreeComp->fxRack.touchTabContent.touchPad.onSerialRgbRequested = [this](int r, int g, int b) {
       rgbManager.sendColor(juce::Colour((juce::uint8)r, (juce::uint8)g, (juce::uint8)b));
@@ -228,11 +232,11 @@ MainComponent::MainComponent()
       if (isUltra) {
           handFreeComp->fxRack.touchTabContent.modeBtn.setButtonText("LADDER FILTER");
           handFreeComp->fxRack.touchTabContent.touchPad.setMode(FX_Rack_Alpha::Ladder);
-          audioEngine.setXyMode(AudioCore::XyMode::Ladder);
+          audioEngine.setXyMode(2, AudioCore::XyMode::Ladder);
       } else {
           handFreeComp->fxRack.touchTabContent.modeBtn.setButtonText("ULTRA MULTI-FX");
           handFreeComp->fxRack.touchTabContent.touchPad.setMode(FX_Rack_Alpha::UltraMulti);
-          audioEngine.setXyMode(AudioCore::XyMode::UltraMulti);
+          audioEngine.setXyMode(2, AudioCore::XyMode::UltraMulti);
       }
   };
 
@@ -251,12 +255,23 @@ MainComponent::MainComponent()
   
   auto loadTrackWithMetadata = [this](const juce::File& file) {
       TrackDatabase::Track t;
-      if (handFreeComp->getTrackDatabase().getTrackByPath(file.getFullPathName(), t)) {
-          audioEngine.loadMainTrack(file, t.bpm);
+      bool hasMetadata = trackDb.getTrackByPath(file.getFullPathName(), t);
+      
+      if (currentMode == LayoutMode::HandFree) {
+          // Always update the waveform display for HandsFree mode
+          handFreeComp->header.waveformDisplay.loadedTrackName = file.getFileNameWithoutExtension();
+          audioEngine.setDeckCuePoint(2, 0.0);
+          handFreeComp->header.waveformDisplay.isPlaying = false;
+          handFreeComp->header.waveformDisplay.generateRgbWaveform(file);
+          handFreeComp->header.waveformDisplay.repaint();
+          if (hasMetadata) audioEngine.loadMainTrack(file, t.bpm);
+          else audioEngine.loadMainTrack(file);
       } else {
-          audioEngine.loadMainTrack(file);
+          // Mixer Mode: load into Deck A on double-click
+          audioEngine.loadDeckA(file, hasMetadata ? t.bpm : 0.0);
       }
   };
+
 
   handFreeComp->header.onFileDropped = loadTrackWithMetadata;
   handFreeComp->header.onEject = [this] { audioEngine.ejectMainTrack(); };
@@ -282,13 +297,15 @@ MainComponent::MainComponent()
       inputManager.setInputMode(mode); 
       rgbManager.setMidiOutput(mode == InputManager::InputMode::MIDI);
   };
-  handFreeComp->fxRack.onSerialPortChanged = [this](const juce::String& port) { inputManager.openSerialPort(port); };
   
-  if (handFreeComp->browserPtr != nullptr) {
-      handFreeComp->browserPtr->onTrackDoubleClicked = loadTrackWithMetadata;
+  handFreeComp->fxRack.onSerialPortChanged = [this](const juce::String& port) { inputManager.openSerialPort(port); };
+
+  if (browser) {
+      browser->onTrackDoubleClicked = loadTrackWithMetadata;
   }
 
   setAudioChannels (2, 2);
+  setLayoutMode(0); // Ensure initial layout is correctly setup
   startTimer(50);
 }
 
@@ -313,7 +330,7 @@ void MainComponent::releaseResources() {
 void MainComponent::timerCallback() {
     if (currentMode == LayoutMode::HandFree && handFreeComp != nullptr) {
         handFreeComp->header.updateTransportInfo(audioEngine.getMainTrackPosition(), audioEngine.getMainTrackLength(), audioEngine.isMainTrackPlaying());
-        handFreeComp->header.updatePeakLevel(audioEngine.getCurrentPeakLevel());
+        handFreeComp->header.updatePeakLevel(audioEngine.getDeckPeakLevel(2));
         handFreeComp->header.updateBpmDisplay(audioEngine.getMainTrackBpm());
         
         auto& pads = handFreeComp->gridPads.getPads();
@@ -340,8 +357,8 @@ void MainComponent::resized() {
 
     if (currentMode == LayoutMode::HandFree && handFreeComp != nullptr)
         handFreeComp->setBounds(area);
-    else if (currentMode == LayoutMode::Mixer)
-        mixerPlaceholder.setBounds(area);
+    else if (currentMode == LayoutMode::Mixer && mixerComp != nullptr)
+        mixerComp->setBounds(area);
 }
 
 // MenuBarModel Implementation
@@ -360,7 +377,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addCommandItem(&commandManager, navConfig);
     } else if (menuName == "Layout") {
         menu.addItem(1, "DJ Hand Free", true, currentMode == LayoutMode::HandFree);
-        menu.addItem(2, "DJ Mixer (Em breve)", true, currentMode == LayoutMode::Mixer);
+        menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
     } else if (menuName == "Help") {
         menu.addItem(10, "Sobre");
         menu.addItem(11, "Licença e Uso");
@@ -436,8 +453,25 @@ bool MainComponent::perform(const InvocationInfo& info) {
 void MainComponent::setLayoutMode(int mode) {
     currentMode = (mode == 0) ? LayoutMode::HandFree : LayoutMode::Mixer;
     
+    if (browser) {
+        if (currentMode == LayoutMode::Mixer) {
+            handFreeComp->bottomPanel.setContent(nullptr);
+            mixerComp->addAndMakeVisible(browser.get());
+            browser->setVisible(true);
+            browser->toFront(false);
+            mixerComp->resized(); // Force internal layout update
+        } else {
+            if (browser->getParentComponent() == mixerComp.get())
+                mixerComp->removeChildComponent(browser.get());
+            
+            handFreeComp->bottomPanel.setContent(browser.get());
+            browser->setVisible(true);
+            browser->toFront(false);
+        }
+    }
+
     if (handFreeComp != nullptr) handFreeComp->setVisible(currentMode == LayoutMode::HandFree);
-    mixerPlaceholder.setVisible(currentMode == LayoutMode::Mixer);
+    if (mixerComp != nullptr) mixerComp->setVisible(currentMode == LayoutMode::Mixer);
     
     menuBar->repaint();
     resized();
@@ -647,7 +681,7 @@ void MainComponent::applyMidiAction(int rowIdx, float value) {
     } 
     // 9-14: FX Slots
     else if (rowIdx >= 9 && rowIdx <= 14) {
-        audioEngine.setFxEnabled(rowIdx - 9, pressed);
+        audioEngine.setFxEnabled(2, rowIdx - 9, pressed);
         handFreeComp->fxRack.updateFxDisplay(rowIdx - 9, 1.0f, pressed);
     }
     // 15-18: Transport
