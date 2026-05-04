@@ -165,12 +165,15 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
         bool active = autoLoopBtn.getToggleState();
         if (active) {
             double duration = (60.0 / currentBpm) * currentLoopBeats;
-            double start = waveformDisplay.currentPos;
-            if (onLoopSet) onLoopSet(start, duration);
+            // Get current playhead directly from audioCore to ensure perfectly accurate loop start
+            double start = audioCore.getDeckPosition(2);
+            audioCore.setDeckLoopRange(2, start, duration);
             waveformDisplay.setLoopVisual(start, duration, true);
         } else {
             waveformDisplay.setLoopVisual(0, 0, false);
         }
+        audioCore.setDeckLoopEnabled(2, active);
+        
         if (onLoopEnabled) onLoopEnabled(active);
     };
     addAndMakeVisible(autoLoopBtn);
@@ -870,11 +873,16 @@ void HeaderComponent::applyCurrentLoop()
     
     if (autoLoopBtn.getToggleState()) {
         double duration = (60.0 / currentBpm) * currentLoopBeats;
-        // Passamos 0 para o AudioCore começar do ponto atual se não estiver em loop,
-        // ou AudioCore deve ser inteligente o suficiente para redimensionar se já estiver.
-        if (onLoopSet) onLoopSet(0, duration); 
-        waveformDisplay.setLoopVisual(waveformDisplay.currentPos, duration, true);
+        
+        // Se já estiver em loop, mantém o início. Se não, pega a posição atual.
+        double start = audioCore.isDeckLoopEnabled(2) ? audioCore.getDeckLoopStart(2) : audioCore.getDeckPosition(2);
+        
+        audioCore.setDeckLoopRange(2, start, duration);
+        audioCore.setDeckLoopEnabled(2, true);
+        
+        waveformDisplay.setLoopVisual(start, duration, true);
     } else {
+        audioCore.setDeckLoopEnabled(2, false);
         waveformDisplay.setLoopVisual(0, 0, false);
     }
 }

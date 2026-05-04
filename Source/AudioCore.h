@@ -70,6 +70,9 @@ public:
     void stopPad (int padIndex);
     void ejectPad (int padIndex);
     bool isPadPlaying (int padIndex) const;
+    bool isPadRecording (int padIndex) const { return padIndex >= 0 && padIndex < 9 ? pads[padIndex].isRecording.load() : false; }
+    bool isPadLooping (int padIndex) const { return padIndex >= 0 && padIndex < 9 ? pads[padIndex].isLooping.load() : false; }
+    bool hasPadAudio (int padIndex) const { return padIndex >= 0 && padIndex < 9 ? pads[padIndex].hasAudio.load() : false; }
     void setPadLoop (int padIndex, bool shouldLoop);
     void setPadVolume (int padIndex, float gain);
     bool loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop);
@@ -353,7 +356,25 @@ private:
     std::unique_ptr<PlaybackChannel> deckAChannel;
     std::unique_ptr<PlaybackChannel> deckBChannel;
     std::unique_ptr<PlaybackChannel> handsFreeChannel;
-    std::vector<std::unique_ptr<PlaybackChannel>> padChannels;
+    struct PadEngine {
+        juce::AudioBuffer<float> buffer;
+        std::atomic<bool> isPlaying {false};
+        std::atomic<bool> isLooping {false};
+        std::atomic<bool> isRecording {false};
+        std::atomic<float> volume {0.8f};
+        std::atomic<bool> hasAudio {false};
+        int playPosition = 0;
+        int writePosition = 0;
+        juce::CriticalSection lock;
+
+        PadEngine() {
+            // Allocate 30 seconds of stereo at 44.1kHz max by default
+            buffer.setSize(2, 44100 * 30);
+            buffer.clear();
+        }
+    };
+    
+    PadEngine pads[9];
     
     juce::AudioBuffer<float> micInputBuffer;
 

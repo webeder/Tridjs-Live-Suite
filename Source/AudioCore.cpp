@@ -36,14 +36,7 @@ AudioCore::AudioCore()
     handsFreeChannel->resampler = std::make_unique<juce::ResamplingAudioSource>(handsFreeChannel->transport.get(), false, 2);
 
     // Pads Setup
-    for (int i = 0; i < 9; ++i)
-    {
-        auto channel = std::make_unique<PlaybackChannel>();
-        channel->transport = std::make_unique<juce::AudioTransportSource>();
-        channel->resampler = std::make_unique<juce::ResamplingAudioSource>(channel->transport.get(), false, 2);
-        mixer.addInputSource (channel->resampler.get(), false);
-        padChannels.push_back (std::move (channel));
-    }
+    // (Pads are now self-contained PadEngine structures initialized automatically)
 
     for (int i = 0; i < NUM_STEMS; ++i)
         stemGains[i].setCurrentAndTargetValue(1.0f);
@@ -214,6 +207,56 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     juce::AudioSourceChannelInfo deckHInfo(&handsFreeChannel->processingBuffer, 0, num);
     handsFreeChannel->resampler->getNextAudioBlock(deckHInfo);
 
+    // [NEW] Process Pads (Memory Recording and Playback)
+    for (int i = 0; i < 9; ++i) {
+        auto& pad = pads[i];
+        const juce::ScopedLock sl(pad.lock);
+        
+        // Handle Recording
+        if (pad.isRecording) {
+            int padSamples = pad.buffer.getNumSamples();
+            int copyNum = std::min(num, padSamples - pad.writePosition);
+            if (copyNum > 0) {
+                // Mix mono mic input into both stereo channels of pad buffer
+                pad.buffer.copyFrom(0, pad.writePosition, micInputBuffer.getReadPointer(0), copyNum);
+                pad.buffer.copyFrom(1, pad.writePosition, micInputBuffer.getReadPointer(0), copyNum);
+                pad.writePosition += copyNum;
+            }
+            if (pad.writePosition >= padSamples) {
+                pad.isRecording = false; // Auto-stop at max capacity
+                pad.hasAudio = true;
+            }
+        }
+        
+        // Handle Playback into handsFreeChannel->processingBuffer (so it gets FX!)
+        if (pad.isPlaying && pad.hasAudio && pad.writePosition > 0) {
+            int padLen = pad.writePosition;
+            int samplesLeft = num;
+            int destPos = 0;
+            
+            while (samplesLeft > 0) {
+                int copyNum = std::min(samplesLeft, padLen - pad.playPosition);
+                
+                for (int ch = 0; ch < std::min(2, pad.buffer.getNumChannels()); ++ch) {
+                    handsFreeChannel->processingBuffer.addFrom(ch, destPos, pad.buffer, ch, pad.playPosition, copyNum, pad.volume.load());
+                }
+                
+                pad.playPosition += copyNum;
+                destPos += copyNum;
+                samplesLeft -= copyNum;
+                
+                if (pad.playPosition >= padLen) {
+                    if (pad.isLooping) {
+                        pad.playPosition = 0;
+                    } else {
+                        pad.isPlaying = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     auto applyMixer = [&](int idx, juce::AudioBuffer<float>& buf) {
         auto& state = (idx == 0) ? deckAState : (idx == 1 ? deckBState : deckHState);
         
@@ -245,14 +288,7 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     mainBuffer->addFrom(0, start, handsFreeChannel->processingBuffer, 0, 0, num);
     mainBuffer->addFrom(1, start, handsFreeChannel->processingBuffer, 1, 0, num);
 
-    // 3. Add Pads from Master Mixer
-    juce::AudioBuffer<float> padMixBuffer(2, num);
-    padMixBuffer.clear();
-    juce::AudioSourceChannelInfo padMixInfo(&padMixBuffer, 0, num);
-    mixer.getNextAudioBlock(padMixInfo);
-    
-    mainBuffer->addFrom(0, start, padMixBuffer, 0, 0, num);
-    mainBuffer->addFrom(1, start, padMixBuffer, 1, 0, num);
+    // 3. (Removed old pad mixer - pads are now mixed into HandsFree)
 
     // 3.5 Mix Mic Input (Independent but part of master chain)
     if (micEnabled.load()) {
@@ -822,12 +858,7 @@ void AudioCore::setDeckPitch(int deckIdx, double pitch) {
         channel->resampler->setResamplingRatio(speed); 
 
     // If it's the global pitch (deck 2), also update all pads
-    if (deckIdx == 2) {
-        for (auto& pc : padChannels) {
-            if (pc && pc->resampler)
-                pc->resampler->setResamplingRatio(speed);
-        }
-    }
+    // (Note: Raw memory pads currently play at 1.0x speed. Resampling can be added later if needed)
 }
 
 double AudioCore::getDeckPitch(int deckIdx) const {
@@ -994,25 +1025,40 @@ void AudioCore::setXyFilter(int deckIdx, float x, float y) {
         } else { state.lpMix = 0.0f; state.hpMix = 0.0f; }
     }
 }
-
 void AudioCore::setXyFilterEnabled(int deckIdx, bool enabled) {
     auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
     state.xyEnabled = enabled;
 }
 
-
 bool AudioCore::loadAudioFile (const juce::File& file, int padIndex, bool shouldLoop)
 {
-    if (padIndex < 0 || padIndex >= (int)padChannels.size()) return false;
+    if (padIndex < 0 || padIndex > 8) return false;
     if (!file.existsAsFile()) return false;
 
     auto* reader = formatManager.createReaderFor (file);
     if (reader != nullptr)
     {
-        auto newSource = std::make_unique<CrossfadingLoopSource> (reader, true);
-        newSource->setLooping(shouldLoop);
-        padChannels[padIndex]->transport->setSource (newSource.get(), 0, nullptr, reader->sampleRate);
-        padChannels[padIndex]->readerSource = std::move (newSource);
+        auto& pad = pads[padIndex];
+        const juce::ScopedLock sl(pad.lock);
+        
+        int numSamples = (int)reader->lengthInSamples;
+        int numCh = reader->numChannels;
+        
+        if (numSamples > pad.buffer.getNumSamples()) {
+            pad.buffer.setSize(std::max(2, numCh), numSamples, false, true, false);
+        }
+        
+        pad.buffer.clear();
+        reader->read(&pad.buffer, 0, numSamples, 0, true, true);
+        
+        pad.playPosition = 0;
+        pad.writePosition = numSamples; 
+        pad.isLooping = shouldLoop;
+        pad.hasAudio = true;
+        pad.isPlaying = false;
+        pad.isRecording = false;
+        
+        delete reader;
         return true;
     }
     return false;
@@ -1020,50 +1066,48 @@ bool AudioCore::loadAudioFile (const juce::File& file, int padIndex, bool should
 
 double AudioCore::detectBpm(const juce::File& file)
 {
-    // Simplified peak detection for BPM estimation
-    // In a real app, this would use a proper transient analyzer.
-    // We'll simulate it for now or return a standard default.
     return 128.0; 
 }
 
 void AudioCore::playPad (int padIndex)
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
-        padChannels[padIndex]->transport->setPosition(0.0);
-        padChannels[padIndex]->transport->start();
+    if (padIndex < 0 || padIndex > 8) return;
+    auto& pad = pads[padIndex];
+    if (pad.hasAudio) {
+        pad.playPosition = 0;
+        pad.isPlaying = true;
     }
 }
 
 bool AudioCore::isPadPlaying (int padIndex) const
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
-        return padChannels[padIndex]->transport->isPlaying();
-    }
-    return false;
+    if (padIndex < 0 || padIndex > 8) return false;
+    return pads[padIndex].isPlaying;
 }
 
 void AudioCore::setPadLoop (int padIndex, bool shouldLoop)
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
-        if (padChannels[padIndex]->readerSource)
-            padChannels[padIndex]->readerSource->setLooping(shouldLoop);
-    }
+    if (padIndex < 0 || padIndex > 8) return;
+    pads[padIndex].isLooping = shouldLoop;
 }
 
 void AudioCore::stopPad (int padIndex)
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
-        padChannels[padIndex]->transport->stop();
-    }
+    if (padIndex < 0 || padIndex > 8) return;
+    pads[padIndex].isPlaying = false;
 }
 
 void AudioCore::ejectPad (int padIndex)
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size()) {
-        padChannels[padIndex]->transport->stop();
-        padChannels[padIndex]->transport->setSource(nullptr);
-        padChannels[padIndex]->readerSource.reset();
-    }
+    if (padIndex < 0 || padIndex > 8) return;
+    auto& pad = pads[padIndex];
+    const juce::ScopedLock sl(pad.lock);
+    pad.isPlaying = false;
+    pad.isRecording = false;
+    pad.hasAudio = false;
+    pad.playPosition = 0;
+    pad.writePosition = 0;
+    pad.buffer.clear();
 }
 
 void AudioCore::setMasterVolume (float volume)
@@ -1080,48 +1124,79 @@ void AudioCore::setTrackVolume(float volume)
 
 void AudioCore::setPadVolume (int padIndex, float gain)
 {
-    if (padIndex >= 0 && padIndex < (int)padChannels.size())
-        padChannels[padIndex]->transport->setGain (gain);
+    if (padIndex < 0 || padIndex > 8) return;
+    pads[padIndex].volume = gain;
 }
 
 void AudioCore::startPadRecording (int padIndex)
 {
-    const juce::ScopedLock sl (padRecorder.lock);
-    padRecorder.writer.reset(); // Close any existing
+    if (padIndex < 0 || padIndex > 8) return;
+    auto& pad = pads[padIndex];
+    const juce::ScopedLock sl(pad.lock);
     
-    auto samplersDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
-                        .getChildFile("tridjs_lifeStudio")
-                        .getChildFile("samplers");
-    samplersDir.createDirectory();
-    
-    auto timeStr = juce::Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S");
-    auto file = samplersDir.getChildFile("Pad_" + juce::String(padIndex + 1) + "_" + timeStr + ".wav");
-    
-    juce::WavAudioFormat wavFormat;
-    if (auto outStream = std::make_unique<juce::FileOutputStream>(file))
-    {
-        if (outStream->openedOk())
-        {
-            double sr = (currentSampleRate > 0) ? currentSampleRate : 44100.0;
-            if (auto writer = wavFormat.createWriterFor(outStream.release(), sr, 2, 16, {}, 0))
-            {
-                padRecorder.writer.reset(writer);
-                padRecorder.file = file;
-                padRecorder.isRecording.store(true);
-            }
-        }
-    }
+    pad.buffer.clear();
+    pad.playPosition = 0;
+    pad.writePosition = 0;
+    pad.hasAudio = false; 
+    pad.isPlaying = false;
+    pad.isRecording = true;
 }
 
 void AudioCore::stopPadRecording (int padIndex, std::function<void(juce::File)> onFinished)
 {
-    const juce::ScopedLock sl (padRecorder.lock);
-    padRecorder.isRecording.store(false);
+    if (padIndex < 0 || padIndex > 8) return;
+    auto& pad = pads[padIndex];
+    pad.isRecording = false;
     
-    if (padRecorder.writer != nullptr)
-    {
-        padRecorder.writer.reset(); // This flushes and closes the file
-        if (onFinished) onFinished(padRecorder.file);
+    if (pad.writePosition > 0) {
+        pad.hasAudio = true;
+        
+        // 1. Deep copy the buffer to avoid data races if the user clears the pad
+        auto tempBuffer = std::make_shared<juce::AudioBuffer<float>>();
+        int numSamples = pad.writePosition;
+        {
+            const juce::ScopedLock sl(pad.lock);
+            tempBuffer->makeCopyOf(pad.buffer, true);
+        }
+        
+        double sr = (currentSampleRate > 0) ? currentSampleRate : 44100.0;
+        
+        // 2. Save in background thread
+        std::thread([tempBuffer, numSamples, padIndex, sr, onFinished]() {
+            auto samplersDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                .getChildFile("tridjs_lifeStudio")
+                                .getChildFile("samplers");
+            samplersDir.createDirectory();
+            
+            auto timeStr = juce::Time::getCurrentTime().formatted("%Y-%m-%d_%H-%M-%S");
+            auto file = samplersDir.getChildFile("Pad_" + juce::String(padIndex + 1) + "_" + timeStr + ".wav");
+            
+            juce::WavAudioFormat wavFormat;
+            if (auto outStream = std::make_unique<juce::FileOutputStream>(file)) {
+                if (outStream->openedOk()) {
+                    if (auto writer = std::unique_ptr<juce::AudioFormatWriter>(
+                            wavFormat.createWriterFor(outStream.release(), sr, 2, 16, {}, 0))) 
+                    {
+                        writer->writeFromAudioSampleBuffer(*tempBuffer, 0, numSamples);
+                        
+                        // Fire callback on main thread if requested
+                        if (onFinished) {
+                            juce::MessageManager::callAsync([onFinished, file]() {
+                                onFinished(file);
+                            });
+                        }
+                        return; // Success
+                    }
+                }
+            }
+            // Fallback on failure
+            if (onFinished) {
+                juce::MessageManager::callAsync([onFinished]() { onFinished(juce::File()); });
+            }
+        }).detach();
+        
+    } else {
+        if (onFinished) onFinished(juce::File());
     }
 }
 

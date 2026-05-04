@@ -13,6 +13,42 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
         bottomPanel.setContent(browserPtr);
     
     // 1. Setup the callbacks first
+    stems.onStemMuteChanged = [this](int idx, bool muted) {
+        audioEngine.setStemMuted(idx, muted);
+    };
+
+    for (int i = 0; i < 9; ++i) {
+        if (auto* pad = gridPads.getPads()[i].get()) {
+            pad->onPlayStateChanged = [this, i](int, bool state) {
+                if (state) audioEngine.playPad(i);
+                else audioEngine.stopPad(i);
+            };
+            pad->onRecordRequested = [this, i](int) {
+                if (audioEngine.isPadRecording(i)) {
+                    audioEngine.stopPadRecording(i, [this](const juce::File& f) {
+                        if (browserPtr && f.existsAsFile()) {
+                            browserPtr->refresh();
+                        }
+                    });
+                } else {
+                    audioEngine.startPadRecording(i);
+                }
+            };
+            pad->onLoopToggled = [this, i](int, bool state) {
+                audioEngine.setPadLoop(i, state);
+            };
+            pad->onEjectRequested = [this, i](int) {
+                audioEngine.ejectPad(i);
+            };
+            pad->onVolumeChanged = [this, i](int, float vol) {
+                audioEngine.setPadVolume(i, vol);
+            };
+            pad->onFileDropped = [this, i](int, const juce::File& f) {
+                audioEngine.loadAudioFile(f, i, false);
+            };
+        }
+    }
+
     fxRack.onExpandedChanged = [this](bool expanded) {
         resized(); // Just trigger layout, internal animation handles the rest
     };
