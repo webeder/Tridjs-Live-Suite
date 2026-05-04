@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include <functional>
 #include <algorithm>
+#include "VstControlWidget.h"
 
 class AudioCore; // Forward declaration
 
@@ -144,17 +145,17 @@ private:
     juce::Slider micKnob;
     juce::Label micLabel { {}, "MIC" };
     juce::Label micValue { {}, "100" };
+    VstControlWidget vstWidget;
 
     juce::Label bpmDisplay { {}, "BPM: ---" };
 
     // Indicators
     juce::Label lcdClock { {}, "00:00:00" };
     juce::TextButton quantToggle { "QUANT" };
-    juce::TextButton gearBtn { "SET" };
 
     // Record
     juce::TextButton recordButton { "REC" };
-    juce::TextButton ejectButton { "EJT" };
+    juce::TextButton ejectButton { juce::String::charToString(0x25B2) }; // ▲
     juce::Label recordDuration { {}, "00:00:00" };
     bool isRecording = false;
     juce::uint32 recordStartTime = 0;

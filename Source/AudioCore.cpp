@@ -98,6 +98,7 @@ void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
     deckAState.prepare(sampleRate);
     deckBState.prepare(sampleRate);
     deckHState.prepare(sampleRate);
+    vocalVstChain.prepare(sampleRate, samplesPerBlockExpected);
     
     micInputBuffer.setSize(2, samplesPerBlockExpected);
     micInputBuffer.clear();
@@ -193,6 +194,9 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     for (int i = 0; i < mainBuffer->getNumChannels(); ++i) {
         micInputBuffer.copyFrom(i, 0, *mainBuffer, i, start, num);
     }
+
+    // Process Mic through VST if active
+    vocalVstChain.processMicAudio(micInputBuffer);
 
     // 1. Process Decks Manually
     deckAChannel->processingBuffer.setSize(2, num, false, false, true);

@@ -1,5 +1,5 @@
 #include <JuceHeader.h>
-#include <BinaryData.h>
+#include "BinaryData.h"
 #include "MainComponent.h"
 
 class TridjsLiveSuiteApplication  : public juce::JUCEApplication
@@ -55,7 +55,7 @@ public:
                               DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent(), true);
+            setContentOwned (static_cast<juce::Component*> (new MainComponent()), true);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);

@@ -6,6 +6,8 @@
 #include <atomic>
 #include <thread>
 #include <onnxruntime_cxx_api.h>
+#include "PluginScannerManager.h"
+#include "VocalVstChain.h"
 
 class TrackDatabase;
 
@@ -174,6 +176,9 @@ public:
     }
     void triggerDeckCue (int deckIdx);
     
+    VocalVstChain& getVocalVstChain() { return vocalVstChain; }
+    PluginScannerManager& getVstManager() { return vstManager; }
+    
     // New specific getters
     double getHandsFreePosition() const { return getDeckPosition(2); }
     double getHandsFreeLength() const { return getDeckLength(2); }
@@ -269,6 +274,8 @@ private:
     std::atomic<float> lastInputLevel { 0.0f };
     std::atomic<bool> micEnabled { false };
     std::atomic<float> micVolume { 1.0f };
+    PluginScannerManager vstManager;
+    VocalVstChain vocalVstChain { vstManager.getFormatManager() };
 
     // ONNX Runtime for Demucs
     static constexpr int NUM_FX = 6;

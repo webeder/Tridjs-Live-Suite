@@ -364,7 +364,7 @@ void MainComponent::resized() {
 
 // MenuBarModel Implementation
 juce::StringArray MainComponent::getMenuBarNames() {
-    return { "Geral", "Layout", "Help" };
+    return { "Geral", "Layout", "Plugins", "Help" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) {
@@ -379,6 +379,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     } else if (menuName == "Layout") {
         menu.addItem(1, "DJ Hand Free", true, currentMode == LayoutMode::HandFree);
         menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
+    } else if (menuName == "Plugins") {
+        menu.addItem(100, "Rescan All");
     } else if (menuName == "Help") {
         menu.addItem(10, "Sobre");
         menu.addItem(11, "Licença e Uso");
@@ -394,6 +396,7 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
     else if (menuItemID == 10) showAboutWindow();
     else if (menuItemID == 11) showLicenseWindow();
     else if (menuItemID == 20) showDonateWindow();
+    else if (menuItemID == 100) audioEngine.getVstManager().rescan();
 }
 
 // ApplicationCommandTarget implementation

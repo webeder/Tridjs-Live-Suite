@@ -3,7 +3,8 @@
 
 HeaderComponent::HeaderComponent (AudioCore& engine) 
     : audioCore(engine),
-      waveformDisplay(engine)
+      waveformDisplay(engine),
+      vstWidget(engine.getVocalVstChain(), engine.getVstManager())
 {
     addAndMakeVisible(waveformDisplay);
     waveformDisplay.onSeekToPosition = [this](double posSeconds) {
@@ -131,9 +132,6 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
     quantToggle.setColour(juce::TextButton::buttonOnColourId, juce::Colours::cyan);
     addAndMakeVisible(quantToggle);
 
-    gearBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-    addAndMakeVisible(gearBtn);
-
     // Record block
     recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     recordButton.setColour (juce::TextButton::textColourOffId, juce::Colour(0xff00F0FF));
@@ -154,6 +152,8 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
     recordDuration.setJustificationType(juce::Justification::centred);
     recordDuration.setColour(juce::Label::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
     addAndMakeVisible(recordDuration);
+
+    addAndMakeVisible(vstWidget);
 
     // Loop Setup
     autoLoopBtn.setClickingTogglesState(true);
@@ -716,14 +716,13 @@ void HeaderComponent::resized()
     // VU Meter
     vuMeter.setBounds(bottomArea.removeFromLeft(120).reduced(2, 8));
 
-    // Right side: Eject, Quantize and Settings
-    auto rightBtns = bottomArea.removeFromRight(180);
+    // Right side: Eject and Quantize
+    auto rightBtns = bottomArea.removeFromRight(120);
     ejectButton.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
     quantToggle.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
-    gearBtn.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
 
     // Loop Controls (Compactos e juntos)
-    auto loopArea = bottomArea.removeFromLeft(350); 
+    auto loopArea = bottomArea.removeFromLeft(180); 
     autoLoopBtn.setBounds(loopArea.removeFromLeft(80).reduced(4, 10));
     
     auto adjArea = loopArea.removeFromLeft(100).reduced(2, 5);
@@ -735,17 +734,20 @@ void HeaderComponent::resized()
     loopInBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
     loopOutBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
 
-    // Record block (Lado Beats - Horizontal)
-    auto recBlock = loopArea.reduced(2, 10);
-    recordButton.setBounds(recBlock.removeFromLeft(60).withTrimmedLeft(20));
+    // Record block (REC + TIME)
+    auto recBlock = bottomArea.removeFromLeft(150).reduced(2, 5);
+    recordButton.setBounds(recBlock.removeFromLeft(60).withTrimmedLeft(10));
     recordDuration.setBounds(recBlock);
 
-    // Mic Section (Gap between loopArea and rightBtns)
-    auto micArea = bottomArea.removeFromLeft(100);
+    // Mic Section
+    auto micArea = bottomArea.removeFromLeft(80).reduced(5, 5);
     micButton.setBounds(micArea.removeFromLeft(35).withSizeKeepingCentre(30, 30));
     micValue.setBounds(micArea.removeFromTop(20));
     micKnob.setBounds(micArea.removeFromTop(micArea.getHeight() - 20));
     micLabel.setBounds(micArea);
+
+    // VST Widget
+    vstWidget.setBounds(bottomArea.removeFromLeft(90).reduced(2, 5));
 }
 
 // ---------------------------------------------------------------
