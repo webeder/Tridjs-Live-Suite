@@ -13,11 +13,10 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
     // Transport Buttons
     playBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff00ff55));
     playBtn.onClick = [this] {
-        if (waveformDisplay.isPlaying) {
-            if (onStop) onStop();
+        if (audioCore.isMainTrackPlaying()) {
+            audioCore.stopMainTrack();
         } else {
-            // If stopped and we click play, just start
-            if (onPlay) onPlay();
+            audioCore.playMainTrack();
         }
     };
     addAndMakeVisible(playBtn);
@@ -35,11 +34,10 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
 
     cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xffffa500));
     cueBtn.onClick = [this] {
-        if (waveformDisplay.isPlaying) {
-            // While playing: set CUE
-            audioCore.setDeckCuePoint(2, waveformDisplay.currentPos);
+        if (audioCore.isMainTrackPlaying()) {
+            audioCore.stopMainTrack();
+            audioCore.seekMainTrack(audioCore.getDeckCuePoint(2));
         } else {
-            // While stopped: trigger CUE
             audioCore.triggerDeckCue(2);
         }
         repaint();
@@ -90,6 +88,38 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
     volumeValue.setColour(juce::Label::textColourId, juce::Colours::cyan);
     volumeValue.setFont(juce::Font("Roboto", 13.0f, juce::Font::bold));
     addAndMakeVisible(volumeValue);
+
+    // Mic Controls
+    micButton.setButtonText(juce::String::fromUTF8("\xf0\x9f\x8e\xa4")); // 🎤
+    micButton.setClickingTogglesState(true);
+    micButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
+    micButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
+    micButton.onClick = [this] {
+        audioCore.setMicEnabled(micButton.getToggleState());
+    };
+    addAndMakeVisible(micButton);
+
+    micKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    micKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    micKnob.setRange(0.0, 100.0, 1.0);
+    micKnob.setValue(100.0);
+    micKnob.setColour(juce::Slider::thumbColourId, juce::Colours::orange);
+    micKnob.onValueChange = [this] {
+        float vol = (float)(micKnob.getValue() / 100.0);
+        micValue.setText(juce::String((int)micKnob.getValue()), juce::dontSendNotification);
+        audioCore.setMicVolume(vol);
+    };
+    addAndMakeVisible(micKnob);
+
+    micLabel.setFont(juce::Font("Roboto", 10.0f, juce::Font::plain));
+    micLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey.withAlpha(0.8f));
+    micLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(micLabel);
+
+    micValue.setJustificationType(juce::Justification::centred);
+    micValue.setColour(juce::Label::textColourId, juce::Colours::orange);
+    micValue.setFont(juce::Font("Roboto", 13.0f, juce::Font::bold));
+    addAndMakeVisible(micValue);
 
     // LCD
     lcdClock.setFont(juce::Font(22.0f, juce::Font::bold));
@@ -709,6 +739,13 @@ void HeaderComponent::resized()
     auto recBlock = loopArea.reduced(2, 10);
     recordButton.setBounds(recBlock.removeFromLeft(60).withTrimmedLeft(20));
     recordDuration.setBounds(recBlock);
+
+    // Mic Section (Gap between loopArea and rightBtns)
+    auto micArea = bottomArea.removeFromLeft(100);
+    micButton.setBounds(micArea.removeFromLeft(35).withSizeKeepingCentre(30, 30));
+    micValue.setBounds(micArea.removeFromTop(20));
+    micKnob.setBounds(micArea.removeFromTop(micArea.getHeight() - 20));
+    micLabel.setBounds(micArea);
 }
 
 // ---------------------------------------------------------------

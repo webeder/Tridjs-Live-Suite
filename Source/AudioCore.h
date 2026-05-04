@@ -102,6 +102,12 @@ public:
     void setXyFilterEnabled (int deckIdx, bool enabled);
     void setXyMode (int deckIdx, XyMode mode);
     
+    // Mic Controls
+    void setMicEnabled (bool enabled) { micEnabled.store(enabled); }
+    bool isMicEnabled() const { return micEnabled.load(); }
+    void setMicVolume (float vol) { micVolume.store(vol); }
+    float getMicVolume() const { return micVolume.load(); }
+    
     float getMasterVolume() const { return masterVolume; }
     float getTrackVolume() const { return trackVolume; }
     void setCrossfaderPosition (float pos);
@@ -261,6 +267,8 @@ private:
 
     std::atomic<float> currentPeakLevel { 0.0f };
     std::atomic<float> lastInputLevel { 0.0f };
+    std::atomic<bool> micEnabled { false };
+    std::atomic<float> micVolume { 1.0f };
 
     // ONNX Runtime for Demucs
     static constexpr int NUM_FX = 6;
@@ -339,6 +347,8 @@ private:
     std::unique_ptr<PlaybackChannel> deckBChannel;
     std::unique_ptr<PlaybackChannel> handsFreeChannel;
     std::vector<std::unique_ptr<PlaybackChannel>> padChannels;
+    
+    juce::AudioBuffer<float> micInputBuffer;
 
     // Helper to detect BPM (Basic peak detection)
     double detectBpm (const juce::File& file);

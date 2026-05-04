@@ -139,6 +139,12 @@ private:
     juce::Label volumeLabel { {}, "VOL TRACK" };
     juce::Label volumeValue { {}, "100" };
 
+    // Mic Controls
+    juce::TextButton micButton;
+    juce::Slider micKnob;
+    juce::Label micLabel { {}, "MIC" };
+    juce::Label micValue { {}, "100" };
+
     juce::Label bpmDisplay { {}, "BPM: ---" };
 
     // Indicators

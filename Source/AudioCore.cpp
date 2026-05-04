@@ -98,6 +98,9 @@ void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
     deckAState.prepare(sampleRate);
     deckBState.prepare(sampleRate);
     deckHState.prepare(sampleRate);
+    
+    micInputBuffer.setSize(2, samplesPerBlockExpected);
+    micInputBuffer.clear();
 }
 
 void AudioCore::setCrossfaderPosition (float pos) { crossfaderPos = pos; }
@@ -181,9 +184,15 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     int start = bufferToFill.startSample;
     int num = bufferToFill.numSamples;
 
-    // 0. Capture Input
+    // 0. Capture Input (Microphone)
     float inLevel = mainBuffer->getMagnitude(start, num);
     lastInputLevel.store(inLevel);
+    
+    // Use pre-allocated buffer to avoid allocation on audio thread
+    micInputBuffer.setSize(mainBuffer->getNumChannels(), num, false, false, true);
+    for (int i = 0; i < mainBuffer->getNumChannels(); ++i) {
+        micInputBuffer.copyFrom(i, 0, *mainBuffer, i, start, num);
+    }
 
     // 1. Process Decks Manually
     deckAChannel->processingBuffer.setSize(2, num, false, false, true);
@@ -240,6 +249,14 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     
     mainBuffer->addFrom(0, start, padMixBuffer, 0, 0, num);
     mainBuffer->addFrom(1, start, padMixBuffer, 1, 0, num);
+
+    // 3.5 Mix Mic Input (Independent but part of master chain)
+    if (micEnabled.load()) {
+        float vol = micVolume.load();
+        for (int i = 0; i < mainBuffer->getNumChannels(); ++i) {
+            mainBuffer->addFrom(i, start, micInputBuffer, i, 0, num, vol);
+        }
+    }
 
     // 4. Master Volume
     mainBuffer->applyGain(start, num, masterVolume);
