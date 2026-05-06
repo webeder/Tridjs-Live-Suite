@@ -17,6 +17,7 @@ public:
         double bpm = 0.0;
         juce::String key;
         int rating = 0;
+        juce::String comment;
         juce::Time lastPlayed;
         juce::Time createdAt;
         int playlistEntryId = 0; // ID from playlist_tracks table
@@ -27,6 +28,9 @@ public:
         juce::MemoryBlock waveform;
         juce::MemoryBlock spectral;
         juce::String beatgrid;
+        juce::String vocalStemPath;
+        juce::String instrumentalStemPath;
+        juce::String beatStemPath;
     };
 
     TrackDatabase();
@@ -39,7 +43,12 @@ public:
     int addOrUpdateTrack(const Track& track);
     bool getTrackByPath(const juce::String& path, Track& track);
     void getAllTracks(std::vector<Track>& results);
-    void searchTracks(const juce::String& query, std::vector<Track>& results);
+    void searchTracks(const juce::String& query, std::vector<Track>& results, const juce::String& sortColumn = "name", bool sortAscending = true);
+    
+    // Partial Updates
+    void updateRating(int trackId, int rating);
+    void updateComment(int trackId, const juce::String& comment);
+    
     
     // Analysis
     void saveAnalysis(const Analysis& analysis);

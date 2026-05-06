@@ -25,6 +25,7 @@ public:
     void paintCell(juce::Graphics& g, int rowNumber, int columnId, int width, int height, bool rowIsSelected) override;
     void cellClicked(int rowNumber, int columnId, const juce::MouseEvent& e) override;
     void cellDoubleClicked(int rowNumber, int columnId, const juce::MouseEvent& e) override;
+    void sortOrderChanged(int newSortColumnId, bool isAscending) override;
     juce::var getDragSourceDescription(const juce::SparseSet<int>& selectedRows) override;
 
     // FileDragAndDropTarget (External)
@@ -58,12 +59,18 @@ public:
     void deleteSelectedTracksFromCollection();
 
 private:
+    void updateTableColumns();
+    
     TrackDatabase& database;
     AnalysisManager& analysisManager;
     std::vector<TrackDatabase::Track> tracks;
+
+    juce::String currentSortColumn = "name";
+    bool sortAscending = true;
     
     juce::TableListBox table;
     juce::TextEditor searchBox;
+    juce::TextButton resetButton;
     
     // Sidebar TreeView
     juce::TreeView sidebarTree;

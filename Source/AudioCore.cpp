@@ -530,7 +530,7 @@ bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
         
         mainTrackBpm = deckABpm;
         thumbnail.setSource(new juce::FileInputSource(file));
-        asyncExtractStems(file);
+        // Mixer decks do not use stems
         return true;
     }
     return false;
@@ -594,7 +594,44 @@ bool AudioCore::loadHandsFreeDeck(const juce::File& file, double bpm) {
         else deckHBpm = detectBpm(file);
         mainTrackBpm = deckHBpm;
         thumbnailH.setSource(new juce::FileInputSource(file));
-        asyncExtractStems(file);
+        
+        // Load pre-computed stems for DJ Hands Free
+        stemsAreReady = false;
+        if (trackDb != nullptr) {
+            TrackDatabase::Track t;
+            if (trackDb->getTrackByPath(file.getFullPathName(), t)) {
+                TrackDatabase::Analysis a;
+                if (trackDb->loadAnalysis(t.id, a) && 
+                    juce::File(a.vocalStemPath).existsAsFile() &&
+                    juce::File(a.instrumentalStemPath).existsAsFile() &&
+                    juce::File(a.beatStemPath).existsAsFile()) 
+                {
+                    // Load the pre-computed stems into the buffers in a background thread
+                    std::thread([this, a]() {
+                        auto loadBuffer = [this](const juce::String& path, juce::AudioBuffer<float>& buffer) {
+                            std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(juce::File(path)));
+                            if (reader) {
+                                buffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
+                                reader->read(&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
+                            } else {
+                                buffer.setSize(2, 0);
+                            }
+                        };
+                        loadBuffer(a.vocalStemPath, vocalBuffer);
+                        loadBuffer(a.beatStemPath, drumsBuffer);
+                        loadBuffer(a.instrumentalStemPath, bassBuffer);
+                        stemsAreReady = true;
+                    }).detach();
+                } else {
+                    asyncExtractStems(file); // Fallback to realtime if not processed
+                }
+            } else {
+                asyncExtractStems(file);
+            }
+        } else {
+            asyncExtractStems(file);
+        }
+        
         return true;
     }
     return false;
