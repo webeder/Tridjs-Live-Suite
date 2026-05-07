@@ -262,7 +262,15 @@ private:
             hpFilter.prepare(spec);
             flanger.prepare(spec);
             echo.prepare(spec);
-            
+
+            // CRITICAL: set explicit filter modes — default is LPF for both!
+            lpFilter.setMode(juce::dsp::LadderFilterMode::LPF12);
+            hpFilter.setMode(juce::dsp::LadderFilterMode::HPF12);
+
+            // Start both filters fully open (transparent)
+            lpFilter.setCutoffFrequencyHz(20000.0f);
+            hpFilter.setCutoffFrequencyHz(20.0f);
+
             fxDelayBuffer.setSize(2, (int)(sr * 2.0));
             fxDelayBuffer.clear();
         }

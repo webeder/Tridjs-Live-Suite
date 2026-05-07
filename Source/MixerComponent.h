@@ -103,56 +103,86 @@ public:
 
         auto& thumb = audioCore.getThumbnail(deckIdx);
         double totalLen = audioCore.getDeckLength(deckIdx);
-        double pos = audioCore.getDeckPosition(deckIdx);
-        
-        if (totalLen > 0.0) {
-            float centerWeight = 0.5f;
-            float centerX = area.getWidth() * centerWeight;
-            double visibleSeconds = zoomLevel;
-            double startTime = pos - (visibleSeconds * centerWeight);
-            double endTime = startTime + visibleSeconds;
+        double pos      = audioCore.getDeckPosition(deckIdx);
 
-            // 1. Draw Moving Grid Lines
+        if (totalLen > 0.0) {
+            double visibleSeconds = zoomLevel;
+            // Original formula — allows negative startTime so the playhead
+            // stays perfectly centred and JUCE AudioThumbnail draws empty
+            // space for t < 0 (near track start). DO NOT clamp to 0.
+            double startTime = pos - visibleSeconds * 0.5;
+            double endTime   = startTime + visibleSeconds;
+
+            // Helper: time → pixel X (same origin as startTime)
+            auto tx = [&](double t) -> float {
+                return (float)((t - startTime) / visibleSeconds) * (float)area.getWidth();
+            };
+
+            // ── 1. Beat / Bar / Phrase Grid ──────────────────────────────────
             double bpm = audioCore.getDeckBpm(deckIdx);
-            if (bpm > 0) {
-                double beatDuration = 60.0 / bpm;
-                double firstBeat = std::floor(startTime / beatDuration) * beatDuration;
-                g.setColour(juce::Colours::white.withAlpha(0.12f));
-                for (double t = firstBeat; t < endTime; t += beatDuration) {
-                    float gx = (float)((t - startTime) / visibleSeconds) * area.getWidth();
-                    g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+            if (bpm > 0.0) {
+                double beat = 60.0 / bpm;
+                double firstBeat = std::floor(startTime / beat) * beat;
+                for (double t = firstBeat; t <= endTime; t += beat) {
+                    float gx = tx(t);
+                    if (gx < 0 || gx > area.getWidth()) continue;
+                    int bn = (int)std::round(t / beat);
+                    if (bn % 16 == 0) {
+                        // Phrase line — bright cyan, 2 px wide
+                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.55f));
+                        g.fillRect(gx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
+                    } else if (bn % 4 == 0) {
+                        // Bar line — medium cyan
+                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.28f));
+                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                    } else {
+                        // Beat line — subtle white
+                        g.setColour(juce::Colours::white.withAlpha(0.08f));
+                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                    }
                 }
             }
 
-            // 2. Draw Waveform
-            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.7f) : juce::Colours::tomato.withAlpha(0.7f));
+            // ── 2. Waveform ───────────────────────────────────────────────────
+            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.7f)
+                                     : juce::Colours::tomato.withAlpha(0.7f));
             thumb.drawChannels(g, area.reduced(0, 5), startTime, endTime, 1.0f);
 
-            // 3. Draw Loop Area in Yellow
+            // ── 3. Loop Region ────────────────────────────────────────────────
             if (audioCore.isDeckLoopEnabled(deckIdx)) {
                 double loopStart = audioCore.getDeckLoopStart(deckIdx);
-                double loopLen = audioCore.getDeckLoopLength(deckIdx);
-                double loopEnd = loopStart + loopLen;
-                
+                double loopEnd   = loopStart + audioCore.getDeckLoopLength(deckIdx);
                 if (loopEnd > startTime && loopStart < endTime) {
-                    float lx = (float)((std::max(loopStart, startTime) - startTime) / visibleSeconds) * area.getWidth();
-                    float rx = (float)((std::min(loopEnd, endTime) - startTime) / visibleSeconds) * area.getWidth();
-                    g.setColour(juce::Colours::yellow.withAlpha(0.35f));
+                    float lx = tx(std::max(loopStart, startTime));
+                    float rx = tx(std::min(loopEnd,   endTime));
+                    // Tinted fill
+                    g.setColour(juce::Colours::yellow.withAlpha(0.22f));
                     g.fillRect(lx, 0.0f, rx - lx, (float)area.getHeight());
-                    g.setColour(juce::Colours::yellow.withAlpha(0.6f));
-                    g.drawVerticalLine((int)lx, 0.0f, (float)area.getHeight());
-                    g.drawVerticalLine((int)rx, 0.0f, (float)area.getHeight());
+                    // Bracket vertical lines
+                    g.setColour(juce::Colours::yellow.withAlpha(0.80f));
+                    g.fillRect(lx,        0.0f, 2.0f, (float)area.getHeight());
+                    g.fillRect(rx - 2.0f, 0.0f, 2.0f, (float)area.getHeight());
+                    // Bracket corners (top & bottom)
+                    g.fillRect(lx,         0.0f,                          10.0f, 3.0f);
+                    g.fillRect(lx,         (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
+                    g.fillRect(rx - 10.0f, 0.0f,                          10.0f, 3.0f);
+                    g.fillRect(rx - 10.0f, (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
                 }
             }
-            
 
-            // 5. CUE Point
+            // ── 4. CUE Point ──────────────────────────────────────────────────
             double cue = audioCore.getDeckCuePoint(deckIdx);
             if (cue >= startTime && cue <= endTime) {
-                float cx = (float)((cue - startTime) / visibleSeconds) * area.getWidth();
+                float cx = tx(cue);
                 g.setColour(juce::Colours::orange);
                 g.fillRect(cx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
+                juce::Path tri;
+                tri.addTriangle(cx - 6, 0, cx + 6, 0, cx, 8);
+                g.fillPath(tri);
             }
+            // NOTE: playhead line is drawn by MixerComponent::paintOverChildren()
+            // at the exact visual centre — do NOT duplicate it here.
+
         } else {
             g.setColour(juce::Colours::grey.withAlpha(0.2f));
             g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
@@ -466,57 +496,85 @@ public:
         void paint(juce::Graphics& g) override {
             auto area = getLocalBounds();
             
-            // 1. Dark Background with Grid
+            // 1. Dark Background
             g.setColour(juce::Colour(0xff0a0a0a));
             g.fillRoundedRectangle(area.toFloat(), 6.0f);
-            
-            g.setColour(juce::Colours::white.withAlpha(0.05f));
-            int gridStep = 40;
-            for (int x = gridStep; x < area.getWidth(); x += gridStep) g.drawVerticalLine(x, 0, (float)area.getHeight());
-            for (int y = gridStep; y < area.getHeight(); y += gridStep) g.drawHorizontalLine(y, 0, (float)area.getWidth());
 
-            // 2. "LADDER FILTER" Header (From reference image)
+            // 2. Header
             auto headerArea = area.removeFromTop(40);
             g.setColour(juce::Colour(0xff222222));
             g.fillRoundedRectangle(headerArea.withSizeKeepingCentre(160, 24).toFloat(), 12.0f);
             g.setColour(juce::Colours::white.withAlpha(0.7f));
             g.setFont(juce::Font(12.0f, juce::Font::bold));
-            g.drawText("LADDER FILTER", headerArea, juce::Justification::centred);
+            g.drawText("DJ FILTER", headerArea, juce::Justification::centred);
 
-            // 3. Axis Labels (Resonance and Cutoff)
-            g.setColour(juce::Colours::white.withAlpha(0.3f));
-            g.setFont(juce::Font(10.0f, juce::Font::bold));
-            g.drawText("RESONANCE", area.withHeight(30), juce::Justification::centred);
-            g.drawText("CUTOFF", area.withWidth(60).withY(area.getHeight()/2 + 40), juce::Justification::centredLeft);
+            int cx = area.getX() + area.getWidth()  / 2;
+            int cy = area.getY() + area.getHeight() / 2;
 
-            // 4. Glowing Yellow Indicator
-            float px = curX * area.getWidth();
-            float py = (1.0f - curY) * area.getHeight() + 40; // Offset by header
+            // 3. Quadrant tinted backgrounds
+            auto tl = area.withRight(cx).withBottom(cy);
+            auto tr = area.withLeft(cx).withBottom(cy);
+            auto bl = area.withRight(cx).withTop(cy);
+            auto br = area.withLeft(cx).withTop(cy);
+
+            g.setColour(juce::Colour(0xff003322).withAlpha(0.55f)); g.fillRect(tl); // Top-Left: cyan-green (Flanger)
+            g.setColour(juce::Colour(0xff002233).withAlpha(0.55f)); g.fillRect(tr); // Top-Right: blue (Echo)
+            g.setColour(juce::Colour(0xff220033).withAlpha(0.45f)); g.fillRect(bl); // Bot-Left: purple (LP+Res)
+            g.setColour(juce::Colour(0xff330022).withAlpha(0.45f)); g.fillRect(br); // Bot-Right: red (HP+Res)
+
+            // 4. Grid lines
+            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            int gridStep = 40;
+            for (int x = area.getX() + gridStep; x < area.getRight(); x += gridStep) g.drawVerticalLine(x, (float)area.getY(), (float)area.getBottom());
+            for (int y = area.getY() + gridStep; y < area.getBottom(); y += gridStep) g.drawHorizontalLine(y, (float)area.getX(), (float)area.getRight());
+
+            // 5. Center crosshair
+            g.setColour(juce::Colours::white.withAlpha(0.18f));
+            g.drawVerticalLine(cx, (float)area.getY(), (float)area.getBottom());
+            g.drawHorizontalLine(cy, (float)area.getX(), (float)area.getRight());
+
+            // 6. Quadrant labels (corners)
+            g.setFont(juce::Font(9.0f, juce::Font::bold));
+            g.setColour(juce::Colours::lime.withAlpha(0.5f));
+            g.drawText("LP+FLANGER", tl.reduced(4, 2), juce::Justification::topLeft);
+            g.setColour(juce::Colours::cyan.withAlpha(0.5f));
+            g.drawText("HP+ECHO", tr.reduced(4, 2), juce::Justification::topRight);
+            g.setColour(juce::Colour(0xffaa88ff).withAlpha(0.5f));
+            g.drawText("LP+RESONANCE", bl.reduced(4, 2), juce::Justification::bottomLeft);
+            g.setColour(juce::Colour(0xffff88aa).withAlpha(0.5f));
+            g.drawText("HP+RESONANCE", br.reduced(4, 2), juce::Justification::bottomRight);
+
+            // 7. Glowing ball indicator
+            float px = curX * area.getWidth()  + area.getX();
+            float py = (1.0f - curY) * area.getHeight() + area.getY();
             
             juce::Colour lime = juce::Colours::lime;
-            
             if (active) {
-                // Outer Glow only when active
                 for (int i = 5; i > 0; --i) {
                     float r = 12.0f + i * 8.0f;
                     g.setColour(lime.withAlpha(0.1f * (6-i)));
                     g.fillEllipse(px - r, py - r, r * 2, r * 2);
                 }
             }
-            
-            // Inner Core
-            g.setColour(active ? lime : lime.withAlpha(0.4f));
-            g.fillEllipse(px - 10, py - 10, 20, 20);
+            float ballR = active ? 10.0f : 4.0f;
+            g.setColour(active ? lime : lime.withAlpha(0.15f));
+            g.fillEllipse(px - ballR, py - ballR, ballR * 2, ballR * 2);
         }
-        void mouseDown(const juce::MouseEvent& e) override { active = true; handleMouse(e); if (onEnableChanged) onEnableChanged(true); }
+        void mouseDown(const juce::MouseEvent& e) override {
+            active = true;
+            // Apply effect from the exact touch position immediately, without passing through center
+            handleMouse(e);
+            if (onEnableChanged) onEnableChanged(true);
+        }
         void mouseDrag(const juce::MouseEvent& e) override { handleMouse(e); }
-        void mouseUp(const juce::MouseEvent&) override { 
-            active = false; 
-            curX = 0.5f; 
+        void mouseUp(const juce::MouseEvent&) override {
+            active = false;
+            // Disable the filter FIRST (stop the effect), then silently reset ball to center
+            if (onEnableChanged) onEnableChanged(false);
+            // Reset ball position visually without sending any filter value (no zero-crossing cut)
+            curX = 0.5f;
             curY = 0.5f;
-            if (onPointChanged) onPointChanged(curX, curY);
-            if (onEnableChanged) onEnableChanged(false); 
-            repaint(); 
+            repaint();
         }
         void handleMouse(const juce::MouseEvent& e) {
             auto area = getLocalBounds();
@@ -638,44 +696,111 @@ private:
                              float sliderPos, float minSliderPos, float maxSliderPos,
                              const juce::Slider::SliderStyle style, juce::Slider& slider) override {
             bool isVertical = (style == juce::Slider::LinearVertical);
-            
-            // 1. Background Track
-            auto trackArea = isVertical ? 
+
+            // ── Track ────────────────────────────────────────────────────────
+            auto trackArea = isVertical ?
                 juce::Rectangle<float>((float)x + width * 0.45f, (float)y, width * 0.1f, (float)height) :
                 juce::Rectangle<float>((float)x, (float)y + height * 0.45f, (float)width, height * 0.1f);
-            
-            g.setColour(juce::Colour(0xff050505));
-            g.fillRoundedRectangle(trackArea, 2.0f);
-            
-            // 2. Professional Fader Cap (Rectangular with cyan line)
+
+            if (!isVertical) {
+                // Crossfader: layered glowing track
+                float ty = trackArea.getY();
+                float th = trackArea.getHeight();
+                float tx = trackArea.getX();
+                float tw = trackArea.getWidth();
+
+                // 1. Outer soft glow halo
+                juce::ColourGradient halo(
+                    juce::Colour(0xff00e5ff).withAlpha(0.08f), tx, ty + th * 0.5f,
+                    juce::Colours::transparentBlack,           tx, ty - th * 2.5f,
+                    false);
+                g.setGradientFill(halo);
+                g.fillRoundedRectangle(tx - 2, ty - 3, tw + 4, th + 6, 4.0f);
+
+                // 2. Dark base track
+                g.setColour(juce::Colour(0xff111418));
+                g.fillRoundedRectangle(trackArea, 3.0f);
+
+                // 3. Inner highlight line (top edge shimmer)
+                juce::ColourGradient shimmer(
+                    juce::Colours::white.withAlpha(0.10f), tx,        ty,
+                    juce::Colours::transparentBlack,        tx + tw * 0.5f, ty,
+                    false);
+                g.setGradientFill(shimmer);
+                g.fillRoundedRectangle(tx, ty, tw * 0.5f, th * 0.4f, 2.0f);
+
+                // 4. Fader position — left tint (A side, cyan)
+                float fillW = sliderPos - tx;
+                if (fillW > 2.0f) {
+                    juce::ColourGradient fillA(
+                        juce::Colour(0xff00e5ff).withAlpha(0.55f), tx, ty,
+                        juce::Colours::transparentBlack,             tx + fillW, ty,
+                        false);
+                    g.setGradientFill(fillA);
+                    g.fillRoundedRectangle(tx + 1, ty + 1, fillW - 2, th - 2, 2.0f);
+                }
+
+                // 5. Right tint (B side, warm white/magenta)
+                float rightStart = sliderPos;
+                float fillRight = (tx + tw) - rightStart;
+                if (fillRight > 2.0f) {
+                    juce::ColourGradient fillB(
+                        juce::Colours::transparentBlack,                    rightStart, ty,
+                        juce::Colour(0xffff44aa).withAlpha(0.45f), tx + tw,  ty,
+                        false);
+                    g.setGradientFill(fillB);
+                    g.fillRoundedRectangle(rightStart, ty + 1, fillRight - 1, th - 2, 2.0f);
+                }
+
+                // 6. Center reference tick
+                float cx = tx + tw * 0.5f;
+                g.setColour(juce::Colours::white.withAlpha(0.35f));
+                g.fillRect(cx - 0.75f, ty - 3.0f, 1.5f, th + 6.0f);
+
+                // 7. Track border
+                g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.18f));
+                g.drawRoundedRectangle(trackArea, 3.0f, 0.8f);
+
+            } else {
+                // Vertical faders: keep original clean style
+                g.setColour(juce::Colour(0xff050505));
+                g.fillRoundedRectangle(trackArea, 2.0f);
+            }
+
+            // ── Thumb cap ────────────────────────────────────────────────────
             float thumbW = isVertical ? (float)width * 0.85f : 45.0f;
             float thumbH = isVertical ? 25.0f : (float)height * 0.85f;
             float thumbX = isVertical ? (float)x + (width - thumbW) * 0.5f : sliderPos - thumbW * 0.5f;
             float thumbY = isVertical ? sliderPos - thumbH * 0.5f : (float)y + (height - thumbH) * 0.5f;
 
             juce::Rectangle<float> thumb(thumbX, thumbY, thumbW, thumbH);
-            
+
+            // Subtle outer glow on thumb
+            if (!isVertical) {
+                g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.20f));
+                g.fillRoundedRectangle(thumb.expanded(3.0f, 2.0f), 5.0f);
+            }
+
             // Main Cap Body (Dark Gradient)
-            juce::ColourGradient grad(juce::Colour(0xff2a2a2a), thumbX, thumbY, juce::Colour(0xff1a1a1a), thumbX, thumbY + thumbH, false);
+            juce::ColourGradient grad(juce::Colour(0xff2e3035), thumbX, thumbY,
+                                      juce::Colour(0xff1a1c1f), thumbX, thumbY + thumbH, false);
             g.setGradientFill(grad);
             g.fillRoundedRectangle(thumb, 3.0f);
-            
-            // Cap Outline
-            g.setColour(juce::Colours::black);
+
+            // Cap Outline — cyan tint for crossfader, plain for faders
+            g.setColour(isVertical ? juce::Colour(0xff333333) : juce::Colour(0xff00e5ff).withAlpha(0.5f));
             g.drawRoundedRectangle(thumb, 3.0f, 1.0f);
-            
-            // Central Cyan Line (The "Marker")
+
+            // Central Cyan Line (marker)
             g.setColour(juce::Colours::cyan);
             if (isVertical) {
                 g.fillRect(thumbX + 2, thumbY + thumbH * 0.5f - 1.0f, thumbW - 4, 2.0f);
-                // Subtle glow for the line
                 g.setColour(juce::Colours::cyan.withAlpha(0.3f));
                 g.fillRect(thumbX + 2, thumbY + thumbH * 0.5f - 2.0f, thumbW - 4, 4.0f);
             } else {
                 g.fillRect(thumbX + thumbW * 0.5f - 1.0f, thumbY + 2, 2.0f, thumbH - 4);
-                // Subtle glow for the line
-                g.setColour(juce::Colours::cyan.withAlpha(0.3f));
-                g.fillRect(thumbX + thumbW * 0.5f - 2.0f, thumbY + 2, 4.0f, thumbH - 4);
+                g.setColour(juce::Colours::cyan.withAlpha(0.4f));
+                g.fillRect(thumbX + thumbW * 0.5f - 2.5f, thumbY + 2, 5.0f, thumbH - 4);
             }
         }
     };
@@ -683,8 +808,10 @@ private:
     struct FxKnobLookAndFeel : public CustomLookAndFeel {
         void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                              float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
-            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(4);
-            auto radius = std::min(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+            // Force perfect square so circle is always symmetric
+            float side = (float)std::min(width, height) - 8.0f;
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side);
+            auto radius = side / 2.0f;
             auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
             
             // Neon Pink / Magenta theme for FX
@@ -767,7 +894,10 @@ private:
             void resized() override {
                 auto area = getLocalBounds();
                 label.setBounds(area.removeFromBottom(28));
-                knob.setBounds(area.reduced(22));
+                // Force a perfect square so the rotary circle is always symmetric
+                int side = std::min(area.getWidth(), area.getHeight()) - 16;
+                side = std::max(side, 10); // minimum safety
+                knob.setBounds(area.withSizeKeepingCentre(side, side));
             }
         };
 
@@ -782,7 +912,7 @@ private:
                 s->knob.onValueChange = [this, i, s] { audioCore.setFxAmount(deckIdx, i, (float)s->knob.getValue()); };
                 s->knob.onToggle = [this, i](bool active) { audioCore.setFxEnabled(deckIdx, i, active); };
                 s->knob.setRange(0.0, 1.0); 
-                s->knob.setValue(0.5);
+                s->knob.setValue(0.5); // Starts in the middle
             }
             addAndMakeVisible(xyPad);
             xyPad.onPointChanged = [this](float x, float y) { audioCore.setXyFilter(deckIdx, x, y); };
@@ -864,9 +994,25 @@ private:
             content.addAndMakeVisible(s);
             s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
             s->setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-            if (i == 0) { s->setRange(0.0, 1.5); s->setValue(1.0); s->onValueChange = [this, deckIdx, s] { audioCore.setDeckGain(deckIdx, (float)s->getValue()); }; }
-            else if (i < 4) { s->setRange(-24.0, 6.0); s->setValue(0.0); s->onValueChange = [this, deckIdx, i, s] { audioCore.setDeckEQ(deckIdx, 3-i, (float)s->getValue()); }; }
-            else { s->setRange(-1.0, 1.0); s->setValue(0.0); s->onValueChange = [this, deckIdx, s] { audioCore.setDeckFilter(deckIdx, (float)s->getValue()); }; }
+            
+            if (i == 0) { 
+                // TRIM: 0.0 to 2.0, default 1.0 (Middle)
+                s->setRange(0.0, 2.0); 
+                s->setValue(1.0); 
+                s->onValueChange = [this, deckIdx, s] { audioCore.setDeckGain(deckIdx, (float)s->getValue()); }; 
+            }
+            else if (i < 4) { 
+                // EQ HIGH/MID/LOW: -12.0 to +12.0, default 0.0 (Middle/Flat)
+                s->setRange(-12.0, 12.0); 
+                s->setValue(0.0); 
+                s->onValueChange = [this, deckIdx, i, s] { audioCore.setDeckEQ(deckIdx, 3-i, (float)s->getValue()); }; 
+            }
+            else { 
+                // COLOR (Filter): -1.0 to 1.0, default 0.0 (Middle/Off)
+                s->setRange(-1.0, 1.0); 
+                s->setValue(0.0); 
+                s->onValueChange = [this, deckIdx, s] { audioCore.setDeckFilter(deckIdx, (float)s->getValue()); }; 
+            }
         }
     }
 

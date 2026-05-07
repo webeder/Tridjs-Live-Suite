@@ -274,10 +274,13 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     applyMixer(1, deckBChannel->processingBuffer);
     applyMixer(2, handsFreeChannel->processingBuffer);
 
-    // 2. Mix Decks into Master Buffer with Crossfader
+    // 2. Mix Decks into Master Buffer with DJ Crossfader Curve
     bufferToFill.clearActiveBufferRegion();
-    float crossA = std::cos(crossfaderPos * juce::MathConstants<float>::halfPi);
-    float crossB = std::sin(crossfaderPos * juce::MathConstants<float>::halfPi);
+    
+    // "Full-Center" curve: both decks at 1.0 in the middle (0.5)
+    // This prevents the volume dip at center point.
+    float crossA = std::min(1.0f, 2.0f * (1.0f - crossfaderPos));
+    float crossB = std::min(1.0f, 2.0f * crossfaderPos);
     
     mainBuffer->addFrom(0, start, deckAChannel->processingBuffer, 0, 0, num, crossA);
     mainBuffer->addFrom(1, start, deckAChannel->processingBuffer, 1, 0, num, crossA);
@@ -435,30 +438,31 @@ void AudioCore::processDeckDsp(juce::AudioBuffer<float>& buffer, DeckMixerState&
         }
     }
 
-    // 3. Apply XY Touch FX
+    // 3. Apply XY Touch FX (4-quadrant)
     if (dState.xyEnabled) {
         juce::dsp::AudioBlock<float> block(buffer);
         juce::dsp::ProcessContextReplacing<float> context(block);
 
-        if (dState.xyMode == XyMode::Ladder) {
-            dState.lpFilter.process(context);
-        } else {
-            if (dState.flangerMix > 0.01f) {
-                dState.flanger.setMix(dState.flangerMix * 0.7f);
-                dState.flanger.process(context);
-            } else if (dState.echoMix > 0.01f) {
-                for (int c = 0; c < buffer.getNumChannels(); ++c) {
-                    float* samples = buffer.getWritePointer(c);
-                    for (int j = 0; j < numSamples; ++j) {
-                        float delayed = dState.echo.popSample(c);
-                        dState.echo.pushSample(c, samples[j] + delayed * 0.5f);
-                        samples[j] += delayed * dState.echoMix * 0.6f;
-                    }
+        // LP and HP always applied — transparent when open (no kill at center)
+        dState.lpFilter.process(context);
+        dState.hpFilter.process(context);
+
+        // Top-Left quadrant: Flanger
+        if (dState.flangerMix > 0.01f) {
+            dState.flanger.setMix(dState.flangerMix * 0.7f);
+            dState.flanger.process(context);
+        }
+
+        // Top-Right quadrant: Echo
+        if (dState.echoMix > 0.01f) {
+            for (int c = 0; c < buffer.getNumChannels(); ++c) {
+                float* samples = buffer.getWritePointer(c);
+                for (int j = 0; j < numSamples; ++j) {
+                    float delayed = dState.echo.popSample(c);
+                    dState.echo.pushSample(c, samples[j] + delayed * 0.5f);
+                    samples[j] += delayed * dState.echoMix * 0.6f;
                 }
             }
-
-            if (dState.lpMix > 0.01f) dState.lpFilter.process(context);
-            if (dState.hpMix > 0.01f) dState.hpFilter.process(context);
         }
     }
 }
@@ -1040,27 +1044,64 @@ void AudioCore::setXyMode(int deckIdx, XyMode m) {
 void AudioCore::setXyFilter(int deckIdx, float x, float y) {
     auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
     state.curX = x; state.curY = y;
-    
-    if (state.xyMode == XyMode::Ladder) {
-        float cutoff = 20.0f * std::pow(1000.0f, x); 
-        state.lpFilter.setCutoffFrequencyHz(cutoff);
-        state.lpFilter.setResonance(y * 0.85f);
-        state.lpMix = 1.0f;
-    } else {
-        if (x < 0.48f) { state.flangerMix = (0.5f - x) * 2.0f; state.echoMix = 0.0f; }
-        else if (x > 0.52f) { state.echoMix = (x - 0.5f) * 2.0f; state.flangerMix = 0.0f; }
-        else { state.flangerMix = 0.0f; state.echoMix = 0.0f; }
 
-        if (y < 0.48f) {
-            state.lpMix = (0.5f - y) * 2.0f; state.hpMix = 0.0f;
-            float cutoff = 20000.0f * std::pow(0.015f, state.lpMix); 
-            state.lpFilter.setCutoffFrequencyHz(cutoff);
-        } else if (y > 0.52f) {
-            state.hpMix = (y - 0.5f) * 2.0f; state.lpMix = 0.0f;
-            float cutoff = 20.0f * std::pow(200.0f, state.hpMix); 
-            state.hpFilter.setCutoffFrequencyHz(cutoff);
-        } else { state.lpMix = 0.0f; state.hpMix = 0.0f; }
+    // ── 4-Quadrant DJ Filter ──────────────────────────────────────────
+    //  Top-Left       │ Top-Right
+    //  LP + Flanger   │ HP + Echo
+    //  ───────────────┼───────────────
+    //  Bottom-Left    │ Bottom-Right
+    //  LP + Resonance │ HP + Resonance
+    //
+    // X: LP left (min 300Hz) ←→ HP right (max 8kHz), transparent at x=0.5
+    // Y: bottom = resonance boost · top = flanger (left) or echo (right)
+    // LP/HP always on → at center they are fully open = no kill anywhere
+    // ─────────────────────────────────────────────────────────────────
+
+    state.flangerMix = 0.0f;
+    state.echoMix    = 0.0f;
+    float resonance  = 0.0f;
+
+    if (x <= 0.5f) {
+        // ── Left half: LP filter ──────────────────────────────────────
+        float t = x * 2.0f;  // 0.0 (far left) → 1.0 (center)
+        // 800 Hz at x=0 (audible bass+mids) → 20 000 Hz at x=0.5 (transparent)
+        float lpCutoff = 800.0f * std::pow(20000.0f / 800.0f, t);
+
+        if (y <= 0.5f) {
+            // Bottom-Left: LP + Resonance
+            resonance = (0.5f - y) * 2.0f * 0.72f;
+        } else {
+            // Top-Left: LP + Flanger
+            state.flangerMix = (y - 0.5f) * 2.0f * 0.85f;
+        }
+
+        state.lpFilter.setCutoffFrequencyHz(lpCutoff);
+        state.lpFilter.setResonance(resonance);
+        state.hpFilter.setCutoffFrequencyHz(20.0f);   // HP open
+        state.hpFilter.setResonance(0.0f);
+    } else {
+        // ── Right half: HP filter ─────────────────────────────────────
+        float t = (x - 0.5f) * 2.0f; // 0.0 (center) → 1.0 (far right)
+        // 20 Hz at x=0.5 (transparent) → 6 000 Hz at x=1.0
+        float hpCutoff = 20.0f * std::pow(6000.0f / 20.0f, t);
+
+        if (y <= 0.5f) {
+            // Bottom-Right: HP + Resonance
+            resonance = (0.5f - y) * 2.0f * 0.72f;
+        } else {
+            // Top-Right: HP + Echo
+            state.echoMix = (y - 0.5f) * 2.0f * 0.85f;
+        }
+
+        state.hpFilter.setCutoffFrequencyHz(hpCutoff);
+        state.hpFilter.setResonance(resonance);
+        state.lpFilter.setCutoffFrequencyHz(20000.0f); // LP open
+        state.lpFilter.setResonance(0.0f);
     }
+
+    // Both filters always active; transparent when open
+    state.lpMix = 1.0f;
+    state.hpMix = 1.0f;
 }
 void AudioCore::setXyFilterEnabled(int deckIdx, bool enabled) {
     auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
@@ -1155,8 +1196,7 @@ void AudioCore::setMasterVolume (float volume)
 void AudioCore::setTrackVolume(float volume)
 {
     trackVolume = volume;
-    if (deckAChannel && deckAChannel->transport)
-        deckAChannel->transport->setGain(volume);
+    setDeckVolume(2, volume); // Track Volume in Header/Hands-Free mode targets Deck H
 }
 
 void AudioCore::setPadVolume (int padIndex, float gain)
