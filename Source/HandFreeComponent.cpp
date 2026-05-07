@@ -53,25 +53,16 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
         resized(); // Just trigger layout, internal animation handles the rest
     };
 
-    sideBrowser.onExpandedChanged = [this](bool expanded) {
-        targetBrowserWidth = expanded ? 250.0f : 35.0f;
-        startTimerHz(60);
-    };
-
     // 2. Initialize state and force a sync
     fxRack.setExpanded(false);
-    sideBrowser.setExpanded(false);
     currentRackWidth = 35.0f;
     targetRackWidth = 35.0f;
-    currentBrowserWidth = 35.0f;
-    targetBrowserWidth = 35.0f;
 
     addAndMakeVisible(header);
     addAndMakeVisible(stems);
     addAndMakeVisible(gridPads);
     addAndMakeVisible(fxRack);
     addAndMakeVisible(footer);
-    addAndMakeVisible(sideBrowser);
     addAndMakeVisible(bottomPanel);
 
     bottomPanel.onClick = [this] {
@@ -137,9 +128,6 @@ void HandFreeComponent::resized()
     footer.setBounds(area.removeFromBottom(40));
     auto body = area;
     
-    int browserW = (int)currentBrowserWidth;
-    sideBrowser.setBounds(body.removeFromLeft(browserW));
-    
     int rackWidth = fxRack.getWidth();
     fxRack.setBounds(body.removeFromRight(rackWidth));
     
@@ -184,18 +172,12 @@ void HandFreeComponent::navegarParaAba(int tabIndex)
 
 void HandFreeComponent::timerCallback()
 {
-    float diffBrowser = targetBrowserWidth - currentBrowserWidth;
-    bool browserMoving = std::abs(diffBrowser) > 0.5f;
-
-    if (browserMoving) currentBrowserWidth += diffBrowser * 0.35f;
-    else currentBrowserWidth = targetBrowserWidth;
-
     float diffBottom = targetBottomHeight - currentBottomHeight;
     bool bottomMoving = std::abs(diffBottom) > 0.5f;
     if (bottomMoving) currentBottomHeight += diffBottom * 0.25f;
     else currentBottomHeight = targetBottomHeight;
 
-    if (!browserMoving && !bottomMoving) {
+    if (!bottomMoving) {
         stopTimer();
     }
     

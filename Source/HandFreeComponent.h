@@ -5,7 +5,6 @@
 #include "StemsComponent.h"
 #include "PadsGridComponent.h"
 #include "FxRackComponent.h"
-#include "SideBrowserComponent.h"
 #include "FooterComponent.h"
 #include "AudioCore.h"
 #include "InputManager.h"
@@ -83,7 +82,6 @@ public:
     PadsGridComponent gridPads;
     FxRackComponent fxRack;
     FooterComponent footer;
-    SideBrowserComponent sideBrowser;
     BottomPanelComponent bottomPanel;
     
     // Data (Now managed by MainComponent)
@@ -97,8 +95,6 @@ private:
     bool panelExpanded = false;
     float currentRackWidth = 35.0f;
     float targetRackWidth = 35.0f;
-    float currentBrowserWidth = 35.0f;
-    float targetBrowserWidth = 35.0f;
     float currentBottomHeight = 25.0f;
     float targetBottomHeight = 25.0f;
     void timerCallback() override;

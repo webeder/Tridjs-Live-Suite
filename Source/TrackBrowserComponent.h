@@ -2,18 +2,49 @@
 #include <JuceHeader.h>
 #include <vector>
 #include <functional>
-#include "TrackDatabase.h"
 #include "AnalysisManager.h"
+#include "TrackDatabase.h"
+#include "DriveManager.h"
 
 class TrackBrowserComponent : public juce::Component,
                              public juce::TableListBoxModel,
                              public juce::FileDragAndDropTarget,
                              public juce::DragAndDropTarget,
                              public juce::Timer,
-                             public juce::KeyListener
+                             public juce::KeyListener,
+                             public juce::ChangeListener
 {
+private:
+    class ExclusionFileFilter : public juce::WildcardFileFilter {
+    public:
+        ExclusionFileFilter(const juce::String& fileWildcard, const juce::String& directoryWildcard, const juce::String& description)
+            : juce::WildcardFileFilter(fileWildcard, directoryWildcard, description) {}
+
+        bool isDirectorySuitable(const juce::File& file) const override {
+            juce::String n = file.getFileName().toUpperCase();
+            if (n.startsWith("$") || n.startsWith(".") ||
+                n == "BOOT" || 
+                n == "WINDOWS" || 
+                n == "PROGRAM FILES" || 
+                n == "PROGRAM FILES (X86)" ||
+                n == "ARQUIVOS DE PROGRAMAS" ||
+                n == "LANGPACK PROGRAM FILES" ||
+                n == "WCH.CN" ||
+                n == "SYSTEM VOLUME INFORMATION" ||
+                n == "RECYCLER" ||
+                n == "RECYCLED" ||
+                n == "MSOCACHE" ||
+                n == "RECOVERY" ||
+                n == "$WINDOWS.~BT" ||
+                file.isHidden())
+                return false;
+                
+            return juce::WildcardFileFilter::isDirectorySuitable(file);
+        }
+    };
+
 public:
-    TrackBrowserComponent(TrackDatabase& db, AnalysisManager& am);
+    TrackBrowserComponent(TrackDatabase& db, AnalysisManager& am, DriveManager& dm);
     ~TrackBrowserComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -48,6 +79,7 @@ public:
     juce::Label titleLabel;
 
     std::function<void(const juce::File&)> onTrackDoubleClicked;
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     
     enum class ViewType { Collection, Playlist, Folder, Recordings };
     ViewType currentView = ViewType::Collection;
@@ -63,6 +95,7 @@ private:
     
     TrackDatabase& database;
     AnalysisManager& analysisManager;
+    DriveManager& driveManager;
     std::vector<TrackDatabase::Track> tracks;
 
     juce::String currentSortColumn = "name";
@@ -75,6 +108,17 @@ private:
     // Sidebar TreeView
     juce::TreeView sidebarTree;
     std::unique_ptr<juce::TreeViewItem> rootItem;
+
+    // Legacy File Browser Routine
+    juce::TimeSliceThread browserThread { "BrowserThread" };
+    ExclusionFileFilter fileFilter { "*.mp3;*.wav;*.flac;*.m4a", "*", "Audio Files" };
+    juce::DirectoryContentsList directoryList { &fileFilter, browserThread };
+    
+    // Stable File Browser
+    juce::FileTreeComponent fileBrowser { directoryList };
+    juce::TextButton backButton { "< VOLTAR" };
+    bool showingFileBrowser = false;
+    juce::File currentDiskFolder;
 
     void drawRating(juce::Graphics& g, int rating, int x, int y, int w, int h);
     void importFiles(const juce::StringArray& paths);
@@ -107,7 +151,7 @@ private:
 
     class PlaylistRootItem : public SidebarItem {
     public:
-        PlaylistRootItem(TrackBrowserComponent& owner) : SidebarItem(owner, "PLAYLISTS", true) {}
+        PlaylistRootItem(TrackBrowserComponent& owner) : SidebarItem(owner, juce::String::fromUTF8("Listas de Reprodução"), true) {}
         void itemOpennessChanged(bool isNowOpen) override;
         void itemClicked(const juce::MouseEvent& e) override;
         bool isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details) override;
@@ -127,21 +171,16 @@ private:
         int playlistId;
     };
 
-    class ExplorerRootItem : public SidebarItem {
+    class FixedDrivesRootItem : public SidebarItem {
     public:
-        ExplorerRootItem(TrackBrowserComponent& owner) : SidebarItem(owner, "EXPLORER", true) {}
-        void itemOpennessChanged(bool isNowOpen) override;
+        FixedDrivesRootItem(TrackBrowserComponent& owner) : SidebarItem(owner, juce::String::fromUTF8("Este Computador"), false) {}
+        void itemClicked(const juce::MouseEvent& e) override;
     };
 
-    class FileItem : public SidebarItem {
+    class ExternalDrivesRootItem : public SidebarItem {
     public:
-        FileItem(TrackBrowserComponent& owner, const juce::File& file) 
-            : SidebarItem(owner, file.getFileName(), file.isDirectory()), file(file) {}
-        
-        void itemOpennessChanged(bool isNowOpen) override;
+        ExternalDrivesRootItem(TrackBrowserComponent& owner) : SidebarItem(owner, juce::String::fromUTF8("Dispositivos Externos"), false) {}
         void itemClicked(const juce::MouseEvent& e) override;
-        juce::var getDragSourceDescription() override;
-        juce::File file;
     };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrackBrowserComponent)

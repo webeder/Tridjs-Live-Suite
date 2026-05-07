@@ -1,10 +1,55 @@
+#include "JuceHeader.h"
 #include "TrackBrowserComponent.h"
+
+#ifdef JUCE_WIN32
+ #include <Windows.h>
+#endif
+
 #include "AnalysisManager.h"
 #include "TrackDatabase.h"
 
+static bool isSystemFolder(const juce::File& f) {
+    juce::String name = f.getFileName().toUpperCase();
+    juce::String fullPath = f.getFullPathName().toUpperCase();
+
+    // 1. Explicit exclusions from request (TEMPORARY DIAGNOSTIC)
+    if (fullPath.contains("C:\\WINDOWS") || 
+        fullPath.contains("C:\\PROGRAM FILES") || 
+        fullPath.contains("C:\\PROGRAM FILES (X86)") ||
+        fullPath.contains("C:\\USERS") ||
+        fullPath.contains("C:\\PROGRAMDATA") ||
+        fullPath.contains("C:\\$RECYCLE.BIN") ||
+        fullPath.contains("C:\\SYSTEM VOLUME INFORMATION"))
+        return true;
+
+    // 2. Hidden or System folders
+    if (name.startsWith("$") || 
+        name == "RECYCLER" || 
+        name == "RECYCLED" ||
+        name == "MSOCACHE" ||
+        name == "RECOVERY" ||
+        name == "BOOT")
+        return true;
+
+    // 3. Hidden attribute
+    if (f.isHidden()) return true;
+
+    // 4. Junctions / Symlinks / Reparse Points (Windows only)
+#ifdef JUCE_WIN32
+    DWORD attr = GetFileAttributesW(f.getFullPathName().toWideCharPointer());
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_REPARSE_POINT))
+        return true;
+#endif
+
+    return false;
+}
+
+
 TrackBrowserComponent::TrackBrowserComponent(TrackDatabase &db,
-                                             AnalysisManager &am)
-    : database(db), analysisManager(am) {
+                                             AnalysisManager &am,
+                                             DriveManager &dm)
+    : database(db), analysisManager(am), driveManager(dm) {
+  // driveManager.addChangeListener(this);
   addAndMakeVisible(titleLabel);
   titleLabel.setText("COLLECTION", juce::dontSendNotification);
   titleLabel.setFont(juce::Font(18.0f, juce::Font::bold));
@@ -19,6 +64,12 @@ TrackBrowserComponent::TrackBrowserComponent(TrackDatabase &db,
   table.getHeader().addColumn("KEY",        5,  80,  50, -1);
   table.getHeader().addColumn("RATING",     6, 120,  80, -1);
   table.getHeader().addColumn("COMMENT",    7, 300, 100, -1);
+  
+  table.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, juce::Colour(0xff333333));
+  table.getVerticalScrollBar().setColour(juce::ScrollBar::backgroundColourId, juce::Colours::transparentBlack);
+  
+  if (auto* v = table.getViewport())
+      v->setScrollBarThickness(12);
 
   table.getHeader().setSortColumnId(2, true); // Sort by Name by default
   currentSortColumn = "TRACK NAME";
@@ -68,31 +119,73 @@ TrackBrowserComponent::TrackBrowserComponent(TrackDatabase &db,
                         juce::Colours::transparentBlack);
   sidebarTree.setDefaultOpenness(true);
 
+  if (auto* viewport = sidebarTree.getViewport())
+  {
+      viewport->setScrollBarsShown (true, false, true, false);
+      viewport->setScrollBarThickness (12);
+  }
+
   rootItem = std::make_unique<RootSidebarItem>();
 
-  auto collection = std::make_unique<SidebarItem>(*this, "COLLECTION", false);
+  auto collection = std::make_unique<SidebarItem>(*this, juce::String::fromUTF8("Faixas"), false);
   rootItem->addSubItem(collection.release());
 
-  rootItem->addSubItem(new PlaylistRootItem(*this));
-  rootItem->addSubItem(new ExplorerRootItem(*this));
+  rootItem->addSubItem(new SidebarItem(*this, "Auto DJ", false));
 
-  auto recordings = std::make_unique<SidebarItem>(*this, "RECORDINGS", false);
+  rootItem->addSubItem(new PlaylistRootItem(*this));
+  
+  rootItem->addSubItem(new SidebarItem(*this, "Caixas", false));
+  
+  rootItem->addSubItem(new FixedDrivesRootItem(*this));
+  rootItem->addSubItem(new ExternalDrivesRootItem(*this));
+
+  auto recordings = std::make_unique<SidebarItem>(*this, juce::String::fromUTF8("Gravações"), false);
   rootItem->addSubItem(recordings.release());
+
+  rootItem->addSubItem(new SidebarItem(*this, juce::String::fromUTF8("Histórico"), false));
+  rootItem->addSubItem(new SidebarItem(*this, juce::String::fromUTF8("Análise"), false));
+  
+  // External Libraries Placeholders
+  rootItem->addSubItem(new SidebarItem(*this, "iTunes", false));
+  rootItem->addSubItem(new SidebarItem(*this, "Traktor", false));
+  rootItem->addSubItem(new SidebarItem(*this, "Rekordbox", false));
+  rootItem->addSubItem(new SidebarItem(*this, "Serato", false));
 
   sidebarTree.setRootItem(rootItem.get());
   sidebarTree.setRootItemVisible(false);
 
-  analysisManager.onAnalysisFinished = [this] { refresh(); };
+  addAndMakeVisible(fileBrowser);
+  fileBrowser.setColour(juce::TreeView::backgroundColourId, juce::Colour(0xff0a0a0a));
+  fileBrowser.setVisible(false);
+  
+  if (auto* v = fileBrowser.getViewport())
+  {
+      v->setScrollBarsShown (true, false, true, false);
+      v->setScrollBarThickness (12);
+  }
 
-  table.addKeyListener(this);
+  addAndMakeVisible(backButton);
+  backButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
+  backButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  backButton.setVisible(false);
+  backButton.onClick = [this] {
+      showingFileBrowser = false;
+      backButton.setVisible(false);
+      fileBrowser.setVisible(false);
+      sidebarTree.setVisible(true);
+      resized();
+  };
 
+  browserThread.startThread(juce::Thread::Priority::normal);
   loadCollection();
   startTimer(500);
 }
 
 TrackBrowserComponent::~TrackBrowserComponent() {
+  driveManager.removeChangeListener(this);
   table.removeKeyListener(this);
   sidebarTree.setRootItem(nullptr);
+  browserThread.stopThread(2000);
   stopTimer();
 }
 
@@ -133,43 +226,87 @@ void TrackBrowserComponent::loadPlaylist(int playlistId) {
   updateTitle();
 }
 
-void TrackBrowserComponent::loadFolder(const juce::File &folder,
-                                       bool recursive) {
+void TrackBrowserComponent::loadFolder(const juce::File &folder, bool recursive) {
+  // TEMPORARY DIAGNOSTIC: Force non-recursive
+  bool shouldBeRecursive = false; 
+
   currentView = folder.getFullPathName().contains("tridjs_lifeStudio")
                     ? ViewType::Recordings
                     : ViewType::Folder;
   activePlaylistId = -1;
-  tracks.clear();
-  juce::Array<juce::File> files;
-  folder.findChildFiles(files, juce::File::findFiles, recursive,
-                        "*.mp3;*.wav;*.flac;*.m4a");
-
-  for (const auto &f : files) {
-    TrackDatabase::Track t;
-    if (database.getTrackByPath(f.getFullPathName(), t)) {
-      tracks.push_back(t);
-    } else {
-      t.path = f.getFullPathName();
-      t.name = f.getFileNameWithoutExtension();
-      tracks.push_back(t);
-    }
-  }
-
-  // Filter results if search is active
-  juce::String filter = searchBox.getText().trim().toLowerCase();
-  if (filter.isNotEmpty()) {
-    tracks.erase(
-        std::remove_if(tracks.begin(), tracks.end(),
-                       [&](const TrackDatabase::Track &t) {
-                         return !t.name.toLowerCase().contains(filter) &&
-                                !t.artist.toLowerCase().contains(filter);
-                       }),
-        tracks.end());
-  }
-
-  refresh();
   updateTitle();
+  
+  tracks.clear();
+  refresh();
+
+  juce::Component::SafePointer<TrackBrowserComponent> safeThis(this);
+  
+  juce::Thread::launch([safeThis, folder, shouldBeRecursive]() {
+    if (safeThis == nullptr) return;
+
+    auto startTime = juce::Time::getMillisecondCounterHiRes();
+    auto threadId = juce::Thread::getCurrentThreadId();
+    
+    juce::Logger::writeToLog("[DIAGNOSTIC] === INÍCIO LEITURA DE PASTA ===");
+    juce::Logger::writeToLog("[DIAGNOSTIC] Pasta: " + folder.getFullPathName());
+    juce::Logger::writeToLog("[DIAGNOSTIC] Thread: " + juce::String((juce::int64)threadId));
+
+    juce::Array<juce::File> files;
+    int limit = 500; 
+    
+    juce::DirectoryIterator iter(folder, shouldBeRecursive, "*.mp3;*.wav;*.flac;*.m4a", juce::File::findFiles);
+    int count = 0;
+    
+    while (iter.next()) {
+        if (safeThis == nullptr) return;
+        
+        if (isSystemFolder(iter.getFile())) continue;
+
+        files.add(iter.getFile());
+        count++;
+        
+        if (count >= limit) {
+            juce::Logger::writeToLog("[DIAGNOSTIC] Limite de " + juce::String(limit) + " itens atingido.");
+            break;
+        }
+        
+        if (juce::Time::getMillisecondCounterHiRes() - startTime > 5000) {
+             juce::Logger::writeToLog("[DIAGNOSTIC] TIMEOUT (>5s) na listagem.");
+             break;
+        }
+    }
+
+    std::vector<TrackDatabase::Track> newTracks;
+    for (const auto &f : files) {
+      TrackDatabase::Track t;
+      if (safeThis->database.getTrackByPath(f.getFullPathName(), t)) {
+        newTracks.push_back(t);
+      } else {
+        t.path = f.getFullPathName();
+        t.name = f.getFileNameWithoutExtension();
+        newTracks.push_back(t);
+      }
+    }
+
+    auto endTime = juce::Time::getMillisecondCounterHiRes();
+    auto totalTime = endTime - startTime;
+    // auto memoryUsage = juce::Process::getMemoryUsage() / (1024 * 1024); // API mismatch fix
+
+    juce::Logger::writeToLog("[DIAGNOSTIC] Tempo Total: " + juce::String(totalTime, 1) + " ms");
+    juce::Logger::writeToLog("[DIAGNOSTIC] Itens Processados: " + juce::String(count));
+    // juce::Logger::writeToLog("[DIAGNOSTIC] Memoria: " + juce::String((int)memoryUsage) + " MB");
+    juce::Logger::writeToLog("[DIAGNOSTIC] === FIM LEITURA DE PASTA ===");
+
+    juce::MessageManager::callAsync([safeThis, newTracks]() {
+      if (safeThis.getComponent() != nullptr) {
+        safeThis->tracks = newTracks;
+        safeThis->refresh();
+      }
+    });
+  });
 }
+
+
 
 void TrackBrowserComponent::updateTitle() {
   if (currentView == ViewType::Collection)
@@ -187,10 +324,32 @@ void TrackBrowserComponent::updateTitle() {
       }
     }
   } else
-    titleLabel.setText("EXPLORER", juce::dontSendNotification);
+    titleLabel.setText("COMPUTADOR", juce::dontSendNotification);
 }
 
-void TrackBrowserComponent::timerCallback() { table.repaint(); }
+void TrackBrowserComponent::timerCallback() {
+  table.repaint();
+  
+  if (showingFileBrowser) {
+      juce::StringArray paths;
+      for (int i = 0; i < fileBrowser.getNumSelectedFiles(); ++i) {
+          auto f = fileBrowser.getSelectedFile(i);
+          if (f.exists()) paths.add(f.getFullPathName());
+      }
+      juce::String desc = paths.joinIntoString("|");
+      if (fileBrowser.getDragAndDropDescription() != desc) {
+          fileBrowser.setDragAndDropDescription(desc);
+          
+          if (fileBrowser.getNumSelectedFiles() == 1) {
+              auto f = fileBrowser.getSelectedFile(0);
+              if (f.isDirectory() && f != currentDiskFolder) {
+                  currentDiskFolder = f;
+                  loadFolder(f, false);
+              }
+          }
+      }
+  }
+}
 
 bool TrackBrowserComponent::keyPressed(const juce::KeyPress &key,
                                        juce::Component *) {
@@ -288,7 +447,20 @@ void TrackBrowserComponent::paint(juce::Graphics &g) {
 void TrackBrowserComponent::resized() {
   auto area = getLocalBounds();
   auto sidebarArea = area.removeFromLeft(180);
-  sidebarTree.setBounds(sidebarArea.withTrimmedTop(40));
+  
+  if (showingFileBrowser) {
+      auto backArea = sidebarArea.removeFromTop(40).reduced(5);
+      backButton.setBounds(backArea);
+      fileBrowser.setBounds(sidebarArea);
+      sidebarTree.setVisible(false);
+      fileBrowser.setVisible(true);
+      backButton.setVisible(true);
+  } else {
+      sidebarTree.setBounds(sidebarArea.withTrimmedTop(40));
+      sidebarTree.setVisible(true);
+      fileBrowser.setVisible(false);
+      backButton.setVisible(false);
+  }
 
   auto headerArea = area.removeFromTop(45).reduced(10, 8);
   searchBox.setBounds(headerArea.removeFromLeft(300));
@@ -523,6 +695,16 @@ void TrackBrowserComponent::filesDropped(const juce::StringArray &files, int x,
   if (auto *pi = dynamic_cast<PlaylistItem *>(item)) {
     addFilesToPlaylist(files, pi->playlistId);
   } else {
+    // If dropped on the grid (table area) and it's a folder, load it
+    if (x > 180) { // Outside sidebar
+        for (const auto& path : files) {
+            juce::File f(path);
+            if (f.isDirectory()) {
+                loadFolder(f);
+                return;
+            }
+        }
+    }
     importFiles(files);
   }
 }
@@ -538,6 +720,18 @@ void TrackBrowserComponent::itemDropped(const SourceDetails &d) {
     paths.addTokens(d.description.toString(), "|", "");
     addFilesToPlaylist(paths, pi->playlistId);
   } else {
+    // Internal drop on the grid area
+    if (d.localPosition.x > 180) {
+        juce::StringArray paths;
+        paths.addTokens(d.description.toString(), "|", "");
+        for (const auto& path : paths) {
+            juce::File f(path);
+            if (f.isDirectory()) {
+                loadFolder(f);
+                return;
+            }
+        }
+    }
     juce::StringArray paths;
     paths.addTokens(d.description.toString(), "|", "");
     importFiles(paths);
@@ -562,9 +756,15 @@ void TrackBrowserComponent::addFilesToPlaylist(const juce::StringArray &paths,
               continue;
             juce::File f(path);
             if (f.isDirectory()) {
+              if (isSystemFolder(f)) continue;
+
               juce::Array<juce::File> subFiles;
-              f.findChildFiles(subFiles, juce::File::findFiles, true,
-                               "*.mp3;*.wav;*.flac;*.m4a");
+              juce::DirectoryIterator iter(f, true, "*.mp3;*.wav;*.flac;*.m4a");
+              int subCount = 0;
+              while (iter.next() && subCount < 1000) {
+                  subFiles.add(iter.getFile());
+                  subCount++;
+              }
               juce::StringArray subPaths;
               for (const auto &sf : subFiles)
                 subPaths.add(sf.getFullPathName());
@@ -632,7 +832,7 @@ void TrackBrowserComponent::importFiles(const juce::StringArray &paths) {
     juce::File f(path);
 
     auto processFile = [&](const juce::File &sf) {
-      analysisManager.queueTrack(sf);
+      // analysisManager.queueTrack(sf); // TEMPORARY DIAGNOSTIC: NO ANALYSIS
 
       // Add to view instantly for real-time update
       bool exists = false;
@@ -651,9 +851,15 @@ void TrackBrowserComponent::importFiles(const juce::StringArray &paths) {
     };
 
     if (f.isDirectory()) {
+      if (isSystemFolder(f)) continue;
+
       juce::Array<juce::File> subFiles;
-      f.findChildFiles(subFiles, juce::File::findFiles, true,
-                       "*.mp3;*.wav;*.flac;*.m4a");
+      juce::DirectoryIterator iter(f, true, "*.mp3;*.wav;*.flac;*.m4a");
+      int subCount = 0;
+      while (iter.next() && subCount < 1000) {
+          subFiles.add(iter.getFile());
+          subCount++;
+      }
       for (const auto &sf : subFiles)
         processFile(sf);
     } else if (f.existsAsFile()) {
@@ -679,15 +885,33 @@ void TrackBrowserComponent::drawRating(juce::Graphics &g, int rating, int x,
 void TrackBrowserComponent::SidebarItem::paintItem(juce::Graphics &g, int width,
                                                    int height) {
   if (isSelected()) {
-    g.setColour(juce::Colour(0xff1a1a1a));
+    g.setColour(juce::Colour(0xff003333)); // Deep cyan highlight
     g.fillAll();
     g.setColour(juce::Colours::cyan);
     g.fillRect(0, 0, 3, height);
   }
+  
+  // Icon placeholder (simple shapes for professional look)
   g.setColour(isSelected() ? juce::Colours::cyan : juce::Colours::grey);
-  g.setFont(
-      juce::Font(13.0f, isSelected() ? juce::Font::bold : juce::Font::plain));
-  g.drawText(name, 10, 0, width - 20, height, juce::Justification::centredLeft);
+  
+  juce::String iconStr = juce::String::fromUTF8("•"); // Default bullet
+  if (name == juce::String::fromUTF8("Faixas")) iconStr = juce::String::fromUTF8("♫");
+  else if (name == juce::String::fromUTF8("Auto DJ")) iconStr = juce::String::fromUTF8("⚡");
+  else if (name == juce::String::fromUTF8("Listas de Reprodução")) iconStr = juce::String::fromUTF8("≡");
+  else if (name == juce::String::fromUTF8("Caixas")) iconStr = juce::String::fromUTF8("❐");
+  else if (name == juce::String::fromUTF8("Este Computador")) iconStr = juce::String::fromUTF8("💻");
+  else if (name == juce::String::fromUTF8("Dispositivos Externos")) iconStr = juce::String::fromUTF8("🔌");
+  else if (name == juce::String::fromUTF8("Computador")) iconStr = juce::String::fromUTF8("💾");
+  else if (name == juce::String::fromUTF8("Gravações")) iconStr = juce::String::fromUTF8("⏺");
+  else if (name == juce::String::fromUTF8("Histórico")) iconStr = juce::String::fromUTF8("🕒");
+  else if (name == juce::String::fromUTF8("Análise")) iconStr = juce::String::fromUTF8("📊");
+  else if (name.contains("iTunes")) iconStr = juce::String::fromUTF8("");
+  
+  g.setFont(juce::Font(14.0f));
+  g.drawText(iconStr, 10, 0, 20, height, juce::Justification::centredLeft);
+  
+  g.setFont(juce::Font(13.0f, isSelected() ? juce::Font::bold : juce::Font::plain));
+  g.drawText(name, 30, 0, width - 40, height, juce::Justification::centredLeft);
 }
 
 juce::var TrackBrowserComponent::SidebarItem::getDragSourceDescription() {
@@ -696,9 +920,9 @@ juce::var TrackBrowserComponent::SidebarItem::getDragSourceDescription() {
 
 void TrackBrowserComponent::SidebarItem::itemClicked(
     const juce::MouseEvent &e) {
-  if (name == "COLLECTION")
+  if (name == "Faixas")
     owner.loadCollection();
-  else if (name == "RECORDINGS") {
+  else if (name == "Gravações") {
     auto musicDir =
         juce::File::getSpecialLocation(juce::File::userMusicDirectory);
     auto tridjsDir = musicDir.getChildFile("tridjs_lifeStudio");
@@ -728,7 +952,7 @@ void TrackBrowserComponent::PlaylistRootItem::itemOpennessChanged(
 void TrackBrowserComponent::PlaylistRootItem::itemClicked(
     const juce::MouseEvent &e) {
   SidebarItem::itemClicked(e);
-  setOpen(true);
+  setOpen(!isOpen());
   if (e.mods.isRightButtonDown()) {
     juce::PopupMenu m;
     m.addItem(1, "New Playlist...");
@@ -864,37 +1088,24 @@ void TrackBrowserComponent::PlaylistItem::itemDropped(
   owner.addFilesToPlaylist(paths, playlistId);
 }
 
-juce::var TrackBrowserComponent::FileItem::getDragSourceDescription() {
-  return file.getFullPathName();
+
+void TrackBrowserComponent::FixedDrivesRootItem::itemClicked(const juce::MouseEvent&) {
+    owner.directoryList.setDirectory(juce::File("C:\\"), true, true);
+    owner.showingFileBrowser = true;
+    owner.resized();
 }
 
-void TrackBrowserComponent::ExplorerRootItem::itemOpennessChanged(
-    bool isNowOpen) {
-  if (isNowOpen) {
-    clearSubItems();
-    juce::Array<juce::File> roots;
-    juce::File::findFileSystemRoots(roots);
-    for (const auto &r : roots)
-      addSubItem(new FileItem(owner, r));
-  }
+void TrackBrowserComponent::ExternalDrivesRootItem::itemClicked(const juce::MouseEvent&) {
+    // Por hora não faz nada conforme solicitado
 }
-
-void TrackBrowserComponent::FileItem::itemOpennessChanged(bool isNowOpen) {
-  if (isNowOpen && file.isDirectory()) {
-    clearSubItems();
-    juce::Array<juce::File> children;
-    file.findChildFiles(children, juce::File::findFilesAndDirectories, false);
-    for (const auto &c : children) {
-      if (c.isDirectory() || c.getFileExtension() == ".mp3" ||
-          c.getFileExtension() == ".wav")
-        addSubItem(new FileItem(owner, c));
+void TrackBrowserComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    if (source == &driveManager) {
+        // Forçar reconstrução da árvore lateral
+        if (rootItem != nullptr) {
+            // Repaint já ajuda, mas se os itens mudaram fisicamente, precisamos forçar o re-render
+            sidebarTree.repaint();
+        }
     }
-  }
 }
 
-void TrackBrowserComponent::FileItem::itemClicked(const juce::MouseEvent &e) {
-  if (file.isDirectory())
-    owner.loadFolder(file);
-  else if (owner.onTrackDoubleClicked)
-    owner.onTrackDoubleClicked(file);
-}
+// Old drive listing logic removed in favor of stable FileTreeComponent
