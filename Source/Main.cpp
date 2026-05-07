@@ -77,7 +77,6 @@ public:
                     juce::String::fromUTF8("Deseja salvar o estado atual?"),
                     "Sim", juce::String::fromUTF8("Não"), nullptr,
                     juce::ModalCallbackFunction::create([mc](int result){
-                        if (result == 1) mc->saveAllSettings();
                         juce::JUCEApplication::getInstance()->systemRequestedQuit();
                     })
                 );

@@ -8,7 +8,7 @@ MainComponent::MainComponent()
     
     // Initialize Data
     audioEngine.setDatabase(&trackDb);
-    browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager);
+    browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager, driveManager);
 
     // Initialize HandFree Layout
     handFreeComp = std::make_unique<HandFreeComponent>(audioEngine, inputManager, rgbManager, deviceManager, browser.get());
@@ -311,7 +311,8 @@ MainComponent::MainComponent()
 }
 
 MainComponent::~MainComponent() {
-    saveAllSettings(); // SALVAR TUDO AO SAIR
+    analysisManager.stopAnalysis(); // Stop background threads first
+    saveAllSettings(); 
     stopTimer();
     shutdownAudio();
 }

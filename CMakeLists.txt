@@ -124,6 +124,8 @@ target_sources(TridjsLiveSuite
         Source/AnalysisManager.h
         Source/TrackBrowserComponent.cpp
         Source/TrackBrowserComponent.h
+        Source/DriveManager.cpp
+        Source/DriveManager.h
 )
 
 # Adicionando Include Directories das dependencias extraídas 

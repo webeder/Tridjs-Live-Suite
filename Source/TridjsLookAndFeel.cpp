@@ -1,3 +1,4 @@
+#include "JuceHeader.h"
 #include "TridjsLookAndFeel.h"
 
 TridjsLookAndFeel::TridjsLookAndFeel()
@@ -205,4 +206,39 @@ void TridjsLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
     auto thumbColor = slider.findColour(juce::Slider::thumbColourId);
     g.setColour(thumbColor);
     g.fillPath(p);
+}
+void TridjsLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar& scrollbar, int x, int y, int width, int height,
+                                      bool isVertical, int thumbStartPosition, int thumbSize, bool isMouseOver, bool isMouseDown)
+{
+    if (thumbSize <= 0)
+        return;
+
+    auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
+    
+    // Background of the scrollbar track
+    g.setColour (juce::Colour (0xff0a0a0a));
+    g.fillRect (area);
+
+    // Thumb area
+    juce::Rectangle<float> thumb;
+    if (isVertical)
+        thumb = { area.getX() + 2.0f, (float) thumbStartPosition, area.getWidth() - 4.0f, (float) thumbSize };
+    else
+        thumb = { (float) thumbStartPosition, area.getY() + 2.0f, (float) thumbSize, area.getHeight() - 4.0f };
+
+    // Colour logic: Glow when hovered/clicked
+    juce::Colour thumbColour = juce::Colour (0xff333333); // Base dark grey
+    if (isMouseDown)
+        thumbColour = juce::Colours::cyan;
+    else if (isMouseOver)
+        thumbColour = juce::Colours::cyan.withAlpha (0.6f);
+    else
+        thumbColour = juce::Colours::grey.withAlpha (0.4f);
+
+    g.setColour (thumbColour);
+    g.fillRoundedRectangle (thumb.reduced (1.0f), 4.0f);
+    
+    // Subtle border for the thumb
+    g.setColour (thumbColour.brighter (0.2f).withAlpha (0.5f));
+    g.drawRoundedRectangle (thumb.reduced (1.0f), 4.0f, 1.0f);
 }

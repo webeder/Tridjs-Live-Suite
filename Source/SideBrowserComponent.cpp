@@ -1,3 +1,4 @@
+#include "JuceHeader.h"
 #include "SideBrowserComponent.h"
 
 SideBrowserComponent::SideBrowserComponent()
@@ -15,6 +16,12 @@ SideBrowserComponent::SideBrowserComponent()
 
     addAndMakeVisible (fileTree);
     fileTree.setColour(juce::TreeView::backgroundColourId, juce::Colour ((juce::uint32)0xff1e1e1e));
+    
+    if (auto* viewport = fileTree.getViewport())
+    {
+        viewport->setScrollBarsShown (true, false, true, false);
+        viewport->setScrollBarThickness (12);
+    }
 
     // Carrega a raiz do disco C: para evitar a lista vazia
     directoryList.setDirectory (juce::File("C:\\"), true, true);

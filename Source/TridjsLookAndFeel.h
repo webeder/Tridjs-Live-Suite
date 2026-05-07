@@ -1,6 +1,6 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "JuceHeader.h"
 
 class TridjsLookAndFeel : public juce::LookAndFeel_V4
 {
@@ -21,6 +21,9 @@ public:
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                            const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider) override;
+
+    void drawScrollbar (juce::Graphics& g, juce::ScrollBar& scrollbar, int x, int y, int width, int height,
+                        bool isVertical, int thumbStartPosition, int thumbSize, bool isMouseOver, bool isMouseDown) override;
 
 
 private:

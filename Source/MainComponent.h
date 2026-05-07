@@ -21,6 +21,7 @@
 #include "TrackDatabase.h"
 #include "AnalysisManager.h"
 #include "TrackBrowserComponent.h"
+#include "DriveManager.h"
 
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
@@ -102,6 +103,7 @@ private:
     // Input Management
     InputManager inputManager;
     RgbManager rgbManager;
+    DriveManager driveManager;
     std::map<int, juce::String> midiMappings; // RowIndex -> "CC X" or "Note X"
 
 

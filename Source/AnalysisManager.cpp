@@ -24,8 +24,8 @@ void AnalysisManager::stopAnalysis() {
 
 void AnalysisManager::run() {
   while (!threadShouldExit() && !shouldStop) {
-    analyzeNext();
-    waitEvent.wait(500);
+    // analyzeNext(); // TEMPORARY DIAGNOSTIC: PAUSED
+    waitEvent.wait(2000);
   }
 }
 

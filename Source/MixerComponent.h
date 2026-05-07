@@ -1133,23 +1133,21 @@ public:
         waveB.setBounds(waveArea.reduced(2));
 
         // 3. Middle Section: [ Deck A ] [ Mixer ] [ Deck B ]
-        // Proportional workspace expansion
         area.reduce(10, 5);
+        auto middleRow = area;
         int centerW = (int)(w * 0.35f); 
         int sideW = (w - centerW) / 2;
         
         deckA.setVisible(true);
         deckB.setVisible(true);
         
-        // Ensure Mixer keeps its professional internal scale
-        mixer.setTransform(juce::AffineTransform());
-        mixer.setBounds(area.removeFromLeft(sideW + centerW).removeFromRight(centerW).reduced(2));
-        
-        // Decks occupy the rest of the workspace
         deckA.setTransform(juce::AffineTransform());
         deckB.setTransform(juce::AffineTransform());
-        deckA.setBounds(area.removeFromLeft(sideW).reduced(2));
-        deckB.setBounds(area.reduced(2));
+        mixer.setTransform(juce::AffineTransform());
+
+        deckA.setBounds(middleRow.removeFromLeft(sideW).reduced(2));
+        mixer.setBounds(middleRow.removeFromLeft(centerW).reduced(2));
+        deckB.setBounds(middleRow.reduced(2));
     }
 private:
     AudioCore& audioCore; TrackBrowserComponent* browser; SimpleWaveform waveA, waveB; DeckSection deckA, deckB; MixerCenterSection mixer;
