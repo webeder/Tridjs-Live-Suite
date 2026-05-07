@@ -364,7 +364,7 @@ void MainComponent::resized() {
 
 // MenuBarModel Implementation
 juce::StringArray MainComponent::getMenuBarNames() {
-    return { "Geral", "Layout", "Plugins", "Help" };
+    return { "Geral", "Layout", "Plugins", juce::String::fromUTF8("Ajuda") };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) {
@@ -381,11 +381,11 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
     } else if (menuName == "Plugins") {
         menu.addItem(100, "Rescan All");
-    } else if (menuName == "Help") {
-        menu.addItem(10, "Sobre");
-        menu.addItem(11, "Licença e Uso");
+    } else if (menuName == juce::String::fromUTF8("Ajuda")) {
+        menu.addItem(10, juce::String::fromUTF8("Sobre"));
+        menu.addItem(11, juce::String::fromUTF8("Licença e Uso"));
         menu.addSeparator();
-        menu.addItem(20, "❤️ Doar / Apoiar");
+        menu.addItem(20, juce::String::fromUTF8("❤️ Doar / Apoiar"));
     }
     return menu;
 }
@@ -493,13 +493,13 @@ void MainComponent::showAboutWindow() {
     
     juce::Image icon = juce::ImageCache::getFromFile(iconFile);
     
-    juce::String msg = "Tridjs Live Suite\n\n"
+    juce::String msg = juce::String::fromUTF8("Tridjs Live Suite\n\n"
                       "Versão: Beta 1.0\n"
                       "Autor: DJ Exder (Coletivo TriDJS)\n"
-                      "Segurança da Informação: DJ Christian Mauro";
+                      "Segurança da Informação: DJ Christian Mauro");
 
     // AlertWindow instance to allow custom components (like the icon at the top)
-    auto* aw = new juce::AlertWindow("Sobre", "", juce::MessageBoxIconType::NoIcon);
+    auto* aw = new juce::AlertWindow(juce::String::fromUTF8("Sobre"), "", juce::MessageBoxIconType::NoIcon);
     
     if (icon.isValid()) {
         auto imgComp = std::make_unique<juce::ImageComponent>();
@@ -524,44 +524,44 @@ void MainComponent::showAboutWindow() {
 }
 
 void MainComponent::showLicenseWindow() {
-    juce::String msg = "Uso: Software gratuito para uso pessoal e profissional.\n\n"
+    juce::String msg = juce::String::fromUTF8("Uso: Software gratuito para uso pessoal e profissional.\n\n"
                       "Proibição: É estritamente proibida a venda deste software.\n\n"
                       "Modificações (GitHub): Em caso de modificação do código-fonte disponível no GitHub, "
                       "é obrigatório manter e dar os devidos créditos ao desenvolvedor original (DJ Exder) "
                       "e ao Coletivo TriDJS.\n\n"
-                      "Direitos: Direitos reservados ao Coletivo TriDJS (Marca Registrada).";
+                      "Direitos: Direitos reservados ao Coletivo TriDJS (Marca Registrada).");
 
     auto opts = juce::MessageBoxOptions()
-        .withTitle("Licença e Uso")
+        .withTitle(juce::String::fromUTF8("Licença e Uso"))
         .withMessage(msg)
         .withButton("OK")
         .withButton("Visitar Site");
 
     juce::AlertWindow::showAsync(opts, [this](int result) {
-        if (result == 1) { // Second button (Visitar Site)
+        if (result == 2) { // Second button (Visitar Site)
             juce::URL("https://www.tridjs.com.br").launchInDefaultBrowser();
         }
     });
 }
 
 void MainComponent::showDonateWindow() {
-    juce::String msg = "\"Fortaleça a Revolução DJ Hand Free!\"\n\n"
+    juce::String msg = juce::String::fromUTF8("\"Fortaleça a Revolução DJ Hand Free!\"\n\n"
                       "O Tridjs Live Suite nasceu com a missão de quebrar as barreiras entre o artista e a tecnologia. "
                       "Nosso objetivo é fomentar a cultura da música eletrônica, oferecendo ferramentas autorais que "
                       "permitem uma performance única e expressiva.\n\n"
                       "Ao apoiar este projeto, você ajuda o Coletivo TriDJs a manter o software gratuito para todos, "
                       "a investir em novos sensores para a tecnologia de gestos e a fortalecer a cena musical no Brasil e no mundo.\n\n"
                       "Sua doação é um investimento na liberdade criativa.\n\n"
-                      "AVISO DE SEGURANÇA: Por segurança, todas as contribuições são processadas exclusivamente através do nosso site oficial.";
+                      "AVISO DE SEGURANÇA: Por segurança, todas as contribuições são processadas exclusivamente através do nosso site oficial.");
 
     auto opts = juce::MessageBoxOptions()
-        .withTitle("Apoie o Movimento TriDJS")
+        .withTitle(juce::String::fromUTF8("Apoie o Movimento TriDJS"))
         .withMessage(msg)
         .withButton("Talvez Depois")
-        .withButton("Fazer parte dessa história (Site Seguro)");
+        .withButton(juce::String::fromUTF8("Fazer parte dessa história (Site Seguro)"));
 
     juce::AlertWindow::showAsync(opts, [](int result) {
-        if (result == 1) { // Second button
+        if (result == 2) { // Second button (Fazer parte desta história)
             juce::URL("https://www.tridjs.com.br/doar").launchInDefaultBrowser();
         }
     });
