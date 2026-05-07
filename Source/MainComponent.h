@@ -73,8 +73,10 @@ public:
     void showLicenseWindow();
     void showDonateWindow();
     void navegarParaAba(int tabIndex);
+    void setSaveOnQuit(bool shouldSave) { saveOnQuit = shouldSave; }
 
 private:
+    bool saveOnQuit = true;
     void loadMidiMappingFromFile (const juce::File& file);
     void applyMidiAction(int rowIdx, float value);
     void handleMasterRecordingFinalization(const juce::File& tempFile);

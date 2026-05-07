@@ -505,6 +505,7 @@ void AudioCore::handleSyncLogic() {
 
 bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
     if (!file.existsAsFile()) return false;
+    deckAPath = file.getFullPathName();
     
     // 1. Eject current track and reset state
     deckAChannel->transport->stop();
@@ -542,6 +543,7 @@ bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
 
 bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
     if (!file.existsAsFile()) return false;
+    deckBPath = file.getFullPathName();
 
     // 1. Eject current track and reset state
     deckBChannel->transport->stop();
@@ -577,6 +579,7 @@ bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
 
 bool AudioCore::loadHandsFreeDeck(const juce::File& file, double bpm) {
     if (!file.existsAsFile()) return false;
+    deckHPath = file.getFullPathName();
 
     // 1. Reset state
     handsFreeChannel->transport->stop();

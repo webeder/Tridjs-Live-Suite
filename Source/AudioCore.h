@@ -148,6 +148,11 @@ public:
         if (deckIdx == 1) return deckBName;
         return deckHName;
     }
+    juce::String getDeckFilePath (int deckIdx) const { 
+        if (deckIdx == 0) return deckAPath;
+        if (deckIdx == 1) return deckBPath;
+        return deckHPath;
+    }
     double getDeckBpm (int deckIdx) const { 
         double base = 120.0;
         double p = 0.0;
@@ -195,6 +200,7 @@ private:
     double deckABpm = 120.0, deckBBpm = 120.0, deckHBpm = 120.0;
     double deckACue = 0.0, deckBCue = 0.0, deckHCue = 0.0;
     juce::String deckAName, deckBName, deckHName;
+    juce::String deckAPath, deckBPath, deckHPath;
     int masterDeckIdx = -1;
     bool syncEnabled[2] = { false, false };
     TrackDatabase* trackDb = nullptr;

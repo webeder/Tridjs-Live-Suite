@@ -312,7 +312,7 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent() {
     analysisManager.stopAnalysis(); // Stop background threads first
-    saveAllSettings(); 
+    if (saveOnQuit) saveAllSettings(); 
     stopTimer();
     shutdownAudio();
 }
@@ -616,6 +616,52 @@ void MainComponent::loadAllSettings() {
         delete xml;
     }
 
+    // 3.5 Mixer State
+    if (mixerComp != nullptr) {
+        PersistenceManager::MixerState mixerState;
+        if (persistence.loadMixerState(mixerState)) {
+            mixerComp->mixer.crossfader.setValue(mixerState.crossfader);
+
+            auto loadDeck = [&](const PersistenceManager::DeckState& ds, int deckIdx) {
+                if (ds.loadedFile.isNotEmpty() && juce::File(ds.loadedFile).existsAsFile()) {
+                    if (deckIdx == 0) audioEngine.loadDeckA(juce::File(ds.loadedFile));
+                    else audioEngine.loadDeckB(juce::File(ds.loadedFile));
+                }
+
+                auto& fader = (deckIdx == 0) ? mixerComp->mixer.faderA : mixerComp->mixer.faderB;
+                fader.setValue(ds.volume);
+
+                auto& knobs = (deckIdx == 0) ? mixerComp->mixer.knobsA : mixerComp->mixer.knobsB;
+                knobs[0]->setValue(ds.gain);
+                knobs[1]->setValue(ds.eqHigh);
+                knobs[2]->setValue(ds.eqMid);
+                knobs[3]->setValue(ds.eqLow);
+                knobs[4]->setValue(ds.filter);
+
+                auto& fx = (deckIdx == 0) ? mixerComp->mixer.fxA : mixerComp->mixer.fxB;
+                for (int i = 0; i < 6; ++i) {
+                    fx.slots[i]->knob.setValue(ds.fxSlots[i].amount);
+                    fx.slots[i]->knob.getProperties().set("isActive", ds.fxSlots[i].enabled);
+                    audioEngine.setFxEnabled(deckIdx, i, ds.fxSlots[i].enabled);
+                    audioEngine.setFxAmount(deckIdx, i, ds.fxSlots[i].amount);
+                    fx.slots[i]->knob.repaint();
+                }
+
+                auto& deckSection = (deckIdx == 0) ? mixerComp->deckA : mixerComp->deckB;
+                deckSection.pitchSlider.setValue(ds.pitch);
+                audioEngine.setSyncEnabled(deckIdx, ds.syncEnabled);
+
+                if (ds.loopLength > 0.0) {
+                    audioEngine.setDeckLoopRange(deckIdx, ds.loopStart, ds.loopLength);
+                }
+                audioEngine.setDeckLoopEnabled(deckIdx, ds.loopEnabled);
+            };
+
+            loadDeck(mixerState.deckA, 0);
+            loadDeck(mixerState.deckB, 1);
+        }
+    }
+
     // 4. MIDI/Serial Mappings
     auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
     auto mapperFile = appDir.getChildFile("Mappers").getChildFile("default_mapping.xml");
@@ -674,6 +720,44 @@ void MainComponent::saveAllSettings() {
 
     // 5. RGB
     persistence.saveRgbSettings(rgbManager.getLightingEffects(), rgbManager.getAllPadMappings(), rgbManager.getAllFxMappings());
+
+    // 6. Mixer State
+    if (mixerComp != nullptr) {
+        PersistenceManager::MixerState mixerState;
+        mixerState.crossfader = (float)mixerComp->mixer.crossfader.getValue();
+
+        auto saveDeck = [&](PersistenceManager::DeckState& ds, int deckIdx) {
+            ds.loadedFile = audioEngine.getDeckFilePath(deckIdx);
+            
+            auto& fader = (deckIdx == 0) ? mixerComp->mixer.faderA : mixerComp->mixer.faderB;
+            ds.volume = (float)fader.getValue();
+            
+            auto& knobs = (deckIdx == 0) ? mixerComp->mixer.knobsA : mixerComp->mixer.knobsB;
+            ds.gain = (float)knobs[0]->getValue();
+            ds.eqHigh = (float)knobs[1]->getValue();
+            ds.eqMid = (float)knobs[2]->getValue();
+            ds.eqLow = (float)knobs[3]->getValue();
+            ds.filter = (float)knobs[4]->getValue();
+            
+            auto& fx = (deckIdx == 0) ? mixerComp->mixer.fxA : mixerComp->mixer.fxB;
+            for (int i = 0; i < 6; ++i) {
+                ds.fxSlots[i].amount = (float)fx.slots[i]->knob.getValue();
+                ds.fxSlots[i].enabled = fx.slots[i]->knob.getProperties()["isActive"];
+            }
+            
+            auto& deckSection = (deckIdx == 0) ? mixerComp->deckA : mixerComp->deckB;
+            ds.pitch = (float)deckSection.pitchSlider.getValue();
+            ds.syncEnabled = audioEngine.isSyncEnabled(deckIdx);
+            ds.loopEnabled = audioEngine.isDeckLoopEnabled(deckIdx);
+            ds.loopStart = audioEngine.getDeckLoopStart(deckIdx);
+            ds.loopLength = audioEngine.getDeckLoopLength(deckIdx);
+        };
+
+        saveDeck(mixerState.deckA, 0);
+        saveDeck(mixerState.deckB, 1);
+
+        persistence.saveMixerState(mixerState);
+    }
 }
 
 void MainComponent::applyMidiAction(int rowIdx, float value) {

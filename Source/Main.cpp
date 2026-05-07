@@ -74,9 +74,11 @@ public:
             {
                 juce::AlertWindow::showOkCancelBox(juce::AlertWindow::QuestionIcon,
                     "Tridjs Live Suite",
-                    juce::String::fromUTF8("Deseja salvar o estado atual?"),
+                    juce::String::fromUTF8("Deseja salvar o estado atual da sessão?"),
                     "Sim", juce::String::fromUTF8("Não"), nullptr,
                     juce::ModalCallbackFunction::create([mc](int result){
+                        // result == 1 is OK (Sim), result == 0 is Cancel (Não)
+                        mc->setSaveOnQuit(result == 1);
                         juce::JUCEApplication::getInstance()->systemRequestedQuit();
                     })
                 );

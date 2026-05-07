@@ -417,8 +417,15 @@ public:
     void paint(juce::Graphics& g) override { g.setColour(juce::Colour(0xff151515)); g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f); }
     void resized() override {
         auto area = getLocalBounds().reduced(15); auto header = area.removeFromTop(40);
-        if (leftSide) { badge.setBounds(header.removeFromLeft(70).removeFromTop(20)); deckLabel.setBounds(header.removeFromLeft(100)); bpmLabel.setBounds(header.removeFromRight(100)); }
-        else { badge.setBounds(header.removeFromRight(70).removeFromTop(20)); deckLabel.setBounds(header.removeFromRight(100)); bpmLabel.setBounds(header.removeFromLeft(100)); }
+        if (leftSide) { 
+            badge.setBounds(header.removeFromLeft(70).removeFromTop(20)); 
+            bpmLabel.setBounds(header.removeFromRight(100)); 
+            deckLabel.setBounds(header); 
+        } else { 
+            badge.setBounds(header.removeFromRight(70).removeFromTop(20)); 
+            bpmLabel.setBounds(header.removeFromLeft(100)); 
+            deckLabel.setBounds(header); 
+        }
         auto footer = area.removeFromBottom(45); int btnW = footer.getWidth() / 4 - 5;
         playBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5); cueBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5);
         syncBtn.setBounds(footer.removeFromLeft(btnW)); footer.removeFromLeft(5); revBtn.setBounds(footer);
@@ -431,7 +438,7 @@ public:
         else { pitchSlider.setBounds(area.removeFromRight(35).reduced(5, 10)); loopControls.setBounds(area.removeFromRight(110).withHeight(85).withY(pitchSlider.getBottom() - 85)); vu.setBounds(area.removeFromLeft(12).reduced(0, 20)); }
         jog.setBounds(area.reduced(10));
     }
-private:
+public:
     void timerCallback() override {
         bpmLabel.setText(juce::String(audioCore.getDeckBpm(deckIdx), 1), juce::dontSendNotification);
         deckLabel.setText(audioCore.getDeckName(deckIdx).isEmpty() ? (deckIdx == 0 ? "DECK A" : "DECK B") : audioCore.getDeckName(deckIdx), juce::dontSendNotification);
@@ -1047,6 +1054,8 @@ private:
         b.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
     }
 
+public:
+
     AudioCore& audioCore;
     CustomLookAndFeel lookAndFeel;
     juce::Component content;
@@ -1149,7 +1158,10 @@ public:
         mixer.setBounds(middleRow.removeFromLeft(centerW).reduced(2));
         deckB.setBounds(middleRow.reduced(2));
     }
+public:
+    DeckSection deckA, deckB; MixerCenterSection mixer;
+
 private:
-    AudioCore& audioCore; TrackBrowserComponent* browser; SimpleWaveform waveA, waveB; DeckSection deckA, deckB; MixerCenterSection mixer;
+    AudioCore& audioCore; TrackBrowserComponent* browser; SimpleWaveform waveA, waveB;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerComponent)
 };

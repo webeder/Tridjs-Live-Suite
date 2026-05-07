@@ -180,5 +180,119 @@ public:
         return juce::XmlDocument::parse(file).release();
     }
 
+    struct DeckState {
+        juce::String loadedFile;
+        float gain = 1.0f;
+        float eqHigh = 0.0f;
+        float eqMid = 0.0f;
+        float eqLow = 0.0f;
+        float filter = 0.0f;
+        float volume = 1.0f;
+        float pitch = 0.0f;
+        bool syncEnabled = false;
+        double loopStart = 0.0;
+        double loopLength = 0.0;
+        bool loopEnabled = false;
+        
+        struct FX { float amount = 0.5f; bool enabled = false; };
+        std::vector<FX> fxSlots;
+        
+        DeckState() { fxSlots.resize(6); }
+    };
+
+    struct MixerState {
+        DeckState deckA;
+        DeckState deckB;
+        float crossfader = 0.5f;
+    };
+
+    void saveMixerState(const MixerState& state)
+    {
+        juce::XmlElement xml("project");
+        xml.setAttribute("version", "1.0");
+        
+        auto* mixerNode = xml.createNewChildElement("MIXER_STATE");
+        mixerNode->setAttribute("crossfader", (double)state.crossfader);
+
+        auto saveDeck = [&](const juce::String& name, const DeckState& ds) {
+            auto* node = mixerNode->createNewChildElement(name);
+            node->setAttribute("loadedFile", ds.loadedFile);
+            node->setAttribute("gain", (double)ds.gain);
+            node->setAttribute("eqHigh", (double)ds.eqHigh);
+            node->setAttribute("eqMid", (double)ds.eqMid);
+            node->setAttribute("eqLow", (double)ds.eqLow);
+            node->setAttribute("filter", (double)ds.filter);
+            node->setAttribute("volume", (double)ds.volume);
+            node->setAttribute("pitch", (double)ds.pitch);
+            node->setAttribute("syncEnabled", ds.syncEnabled);
+            node->setAttribute("loopStart", ds.loopStart);
+            node->setAttribute("loopLength", ds.loopLength);
+            node->setAttribute("loopEnabled", ds.loopEnabled);
+            
+            auto* fxNode = node->createNewChildElement("FX_SLOTS");
+            for (size_t i = 0; i < ds.fxSlots.size(); ++i) {
+                auto* slot = fxNode->createNewChildElement("FX");
+                slot->setAttribute("idx", (int)i);
+                slot->setAttribute("amount", (double)ds.fxSlots[i].amount);
+                slot->setAttribute("enabled", ds.fxSlots[i].enabled);
+            }
+        };
+
+        saveDeck("DECK_A", state.deckA);
+        saveDeck("DECK_B", state.deckB);
+
+        auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+                        .getParentDirectory().getChildFile("data/mixer_state.xml");
+        xml.writeTo(file);
+    }
+
+    bool loadMixerState(MixerState& state)
+    {
+        auto file = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+                        .getParentDirectory().getChildFile("data/mixer_state.xml");
+        if (!file.existsAsFile()) return false;
+
+        std::unique_ptr<juce::XmlElement> xml(juce::XmlDocument::parse(file));
+        if (xml == nullptr) return false;
+
+        auto* mixerNode = xml->getChildByName("MIXER_STATE");
+        if (mixerNode == nullptr) return false;
+
+        state.crossfader = (float)mixerNode->getDoubleAttribute("crossfader", 0.5);
+
+        auto loadDeck = [&](const juce::String& name, DeckState& ds) {
+            auto* node = mixerNode->getChildByName(name);
+            if (node == nullptr) return;
+            
+            ds.loadedFile = node->getStringAttribute("loadedFile");
+            ds.gain = (float)node->getDoubleAttribute("gain", 1.0);
+            ds.eqHigh = (float)node->getDoubleAttribute("eqHigh", 0.0);
+            ds.eqMid = (float)node->getDoubleAttribute("eqMid", 0.0);
+            ds.eqLow = (float)node->getDoubleAttribute("eqLow", 0.0);
+            ds.filter = (float)node->getDoubleAttribute("filter", 0.0);
+            ds.volume = (float)node->getDoubleAttribute("volume", 1.0);
+            ds.pitch = (float)node->getDoubleAttribute("pitch", 0.0);
+            ds.syncEnabled = node->getBoolAttribute("syncEnabled", false);
+            ds.loopStart = node->getDoubleAttribute("loopStart", 0.0);
+            ds.loopLength = node->getDoubleAttribute("loopLength", 0.0);
+            ds.loopEnabled = node->getBoolAttribute("loopEnabled", false);
+            
+            if (auto* fxNode = node->getChildByName("FX_SLOTS")) {
+                for (auto* slot = fxNode->getFirstChildElement(); slot != nullptr; slot = slot->getNextElement()) {
+                    int idx = slot->getIntAttribute("idx", -1);
+                    if (idx >= 0 && idx < (int)ds.fxSlots.size()) {
+                        ds.fxSlots[idx].amount = (float)slot->getDoubleAttribute("amount", 0.5);
+                        ds.fxSlots[idx].enabled = slot->getBoolAttribute("enabled", false);
+                    }
+                }
+            }
+        };
+
+        loadDeck("DECK_A", state.deckA);
+        loadDeck("DECK_B", state.deckB);
+
+        return true;
+    }
+
 private:
 };
