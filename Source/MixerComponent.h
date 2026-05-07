@@ -1096,29 +1096,28 @@ public:
         }
     }
 
-    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::black); }
 
     void paintOverChildren(juce::Graphics& g) override {
         auto area = getLocalBounds();
         auto h = getHeight();
-        auto waveAreaHeight = (int)(h * 0.18f); // Must match resized() 0.18f
+        auto waveAreaHeight = (int)(h * 0.18f); 
         
         float centerX = area.getWidth() / 2.0f;
         
-        // Single unified vertical line (Playhead)
         g.setColour(juce::Colours::white.withAlpha(0.85f));
         g.fillRect(centerX - 1.5f, 0.0f, 3.0f, (float)waveAreaHeight);
         
-        // Slight glow/shadow
         g.setColour(juce::Colours::white.withAlpha(0.2f));
         g.fillRect(centerX - 2.5f, 0.0f, 5.0f, (float)waveAreaHeight);
     }
 
     void resized() override {
         auto area = getLocalBounds();
-        auto h = getHeight();
-        
-        // 1. Browser at the bottom (35% height)
+        if (area.isEmpty()) return;
+        auto w = area.getWidth();
+        auto h = area.getHeight();
+
+        // 1. Browser (Bottom 35%) - Fills width
         auto browserArea = area.removeFromBottom((int)(h * 0.35f));
         if (browser != nullptr) {
             browser->setTransform(juce::AffineTransform());
@@ -1126,26 +1125,30 @@ public:
             browser->setVisible(true);
         }
 
-        // 2. Waveforms at the top (18% height)
+        // 2. Waveforms (Top 18%) - Fills width intelligently
         auto waveArea = area.removeFromTop((int)(h * 0.18f));
         waveA.setTransform(juce::AffineTransform());
         waveB.setTransform(juce::AffineTransform());
         waveA.setBounds(waveArea.removeFromTop(waveArea.getHeight() / 2).reduced(2)); 
         waveB.setBounds(waveArea.reduced(2));
 
-        // 3. Middle row: [ Deck A ] [ Mixer ] [ Deck B ]
+        // 3. Middle Section: [ Deck A ] [ Mixer ] [ Deck B ]
+        // Proportional workspace expansion
         area.reduce(10, 5);
-        int centerW = (int)(area.getWidth() * 0.35f); 
-        int sideW = (area.getWidth() - centerW) / 2;
+        int centerW = (int)(w * 0.35f); 
+        int sideW = (w - centerW) / 2;
         
         deckA.setVisible(true);
         deckB.setVisible(true);
+        
+        // Ensure Mixer keeps its professional internal scale
+        mixer.setTransform(juce::AffineTransform());
+        mixer.setBounds(area.removeFromLeft(sideW + centerW).removeFromRight(centerW).reduced(2));
+        
+        // Decks occupy the rest of the workspace
         deckA.setTransform(juce::AffineTransform());
         deckB.setTransform(juce::AffineTransform());
-        mixer.setTransform(juce::AffineTransform());
-
         deckA.setBounds(area.removeFromLeft(sideW).reduced(2));
-        mixer.setBounds(area.removeFromLeft(centerW).reduced(2));
         deckB.setBounds(area.reduced(2));
     }
 private:
