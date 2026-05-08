@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "Controllers/ControllerSandboxWindow.h"
 
 MainComponent::MainComponent() 
     : rgbManager (inputManager.getSerialManager())
@@ -382,6 +383,8 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
     } else if (menuName == "Plugins") {
         menu.addItem(100, "Rescan All");
+        menu.addSeparator();
+        menu.addItem(200, juce::CharPointer_UTF8("\xf0\x9f\x8e\x9b\xef\xb8\x8f  Controller Sandbox (Dev)"));
     } else if (menuName == juce::String::fromUTF8("Ajuda")) {
         menu.addItem(10, juce::String::fromUTF8("Sobre"));
         menu.addItem(11, juce::String::fromUTF8("Licença e Uso"));
@@ -398,6 +401,20 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
     else if (menuItemID == 11) showLicenseWindow();
     else if (menuItemID == 20) showDonateWindow();
     else if (menuItemID == 100) audioEngine.getVstManager().rescan();
+    else if (menuItemID == 200) openControllerSandbox();
+}
+
+void MainComponent::openControllerSandbox()
+{
+    if (!sandboxWindow || !sandboxWindow->isVisible())
+    {
+        sandboxWindow = std::make_unique<ControllerSandboxWindow>();
+        sandboxWindow->setVisible(true);
+    }
+    else
+    {
+        sandboxWindow->toFront(true);
+    }
 }
 
 // ApplicationCommandTarget implementation

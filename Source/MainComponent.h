@@ -4,6 +4,9 @@
 #include <memory>
 #include <map>
 
+// Forward declare to avoid pulling all of the sandbox headers into every TU
+class ControllerSandboxWindow;
+
 #include "TridjsLookAndFeel.h"
 #include "HandFreeComponent.h"
 
@@ -74,6 +77,7 @@ public:
     void showDonateWindow();
     void navegarParaAba(int tabIndex);
     void setSaveOnQuit(bool shouldSave) { saveOnQuit = shouldSave; }
+    void openControllerSandbox();
 
 private:
     bool saveOnQuit = true;
@@ -116,6 +120,7 @@ private:
     double currentSampleRate = 44100.0;
     
     juce::ApplicationCommandManager commandManager;
+    std::unique_ptr<ControllerSandboxWindow> sandboxWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -92,6 +92,14 @@ target_sources(TridjsLiveSuite
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h
+        Source/Controllers/Core/ControllerEvent.h
+        Source/Controllers/Core/ControllerProfile.h
+        Source/Controllers/Core/BaseController.h
+        Source/Controllers/Core/ControllerRouter.h
+        Source/Controllers/Professional/Mixxx/MixxxMappingParser.h
+        Source/Controllers/Professional/Mixxx/MixxxJSEngine.h
+        Source/Controllers/MockAudioEngine.h
+        Source/Controllers/ControllerSandboxWindow.h
         Source/HandFreeComponent.cpp
         Source/HandFreeComponent.h
         Source/TridjsLookAndFeel.cpp
