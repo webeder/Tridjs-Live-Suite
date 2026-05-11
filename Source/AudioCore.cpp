@@ -504,6 +504,7 @@ void AudioCore::handleSyncLogic() {
 
 bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
     if (!file.existsAsFile()) return false;
+    deckABpm = 0.0;
     
     // 1. Eject current track and reset state
     deckAChannel->transport->stop();
@@ -541,6 +542,7 @@ bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
 
 bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
     if (!file.existsAsFile()) return false;
+    deckBBpm = 0.0;
 
     // 1. Eject current track and reset state
     deckBChannel->transport->stop();
@@ -759,7 +761,8 @@ void AudioCore::setDeckLoopRange(int deckIdx, double startTime, double duration)
 
     if (channel && channel->readerSource) {
         if (startTime <= 0) startTime = channel->transport->getCurrentPosition();
-        channel->readerSource->setLoopRange((juce::int64)(startTime * currentSampleRate), (juce::int64)(duration * currentSampleRate));
+        double sr = getDeckSourceSampleRate(deckIdx);
+        channel->readerSource->setLoopRange((juce::int64)(startTime * sr), (juce::int64)(duration * sr));
     }
 }
 
@@ -791,7 +794,7 @@ double AudioCore::getDeckLoopStart(int deckIdx) const {
     else channel = handsFreeChannel.get();
 
     if (channel && channel->readerSource)
-        return (double)channel->readerSource->getLoopStart() / currentSampleRate;
+        return (double)channel->readerSource->getLoopStart() / getDeckSourceSampleRate(deckIdx);
     return 0.0;
 }
 
@@ -802,8 +805,19 @@ double AudioCore::getDeckLoopLength(int deckIdx) const {
     else channel = handsFreeChannel.get();
 
     if (channel && channel->readerSource)
-        return (double)channel->readerSource->getLoopLength() / currentSampleRate;
+        return (double)channel->readerSource->getLoopLength() / getDeckSourceSampleRate(deckIdx);
     return 0.0;
+}
+
+double AudioCore::getDeckSourceSampleRate(int deckIdx) const {
+    PlaybackChannel* channel = nullptr;
+    if (deckIdx == 0) channel = deckAChannel.get();
+    else if (deckIdx == 1) channel = deckBChannel.get();
+    else channel = handsFreeChannel.get();
+
+    if (channel && channel->readerSource)
+        return channel->readerSource->getSourceSampleRate();
+    return 44100.0;
 }
 
 
@@ -914,6 +928,7 @@ double AudioCore::getDeckPitch(int deckIdx) const {
 AudioCore::CrossfadingLoopSource::CrossfadingLoopSource(juce::AudioFormatReader* reader, bool deleteReaderWhenDone) 
     : readerSource(std::make_unique<juce::AudioFormatReaderSource>(reader, deleteReaderWhenDone))
 {
+    sourceSampleRate = reader->sampleRate;
     readerSource->setLooping(false); // Vamos controlar o loop manualmente para aplicar o crossfade
 }
 

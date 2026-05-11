@@ -13,25 +13,21 @@ class SimpleWaveform : public juce::Component,
 public:
     SimpleWaveform(AudioCore& ac, int idx) : audioCore(ac), deckIdx(idx) {
         audioCore.getThumbnail(deckIdx).addChangeListener(this);
-        setBufferedToImage(true);
-        startTimer(16); // ~60 FPS
-        
         addAndMakeVisible(zoomInBtn);
         addAndMakeVisible(zoomOutBtn);
-        
-        zoomInBtn.setButtonText("+");
-        zoomOutBtn.setButtonText("-");
+        zoomInBtn.setButtonText("+"); zoomOutBtn.setButtonText("-");
+        zoomInBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.7); repaint(); };
+        zoomOutBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.4); repaint(); };
         
         auto setupZoomBtn = [](juce::TextButton& b) {
             b.setColour(juce::TextButton::buttonColourId, juce::Colours::black.withAlpha(0.6f));
             b.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-            b.setConnectedEdges(juce::Button::ConnectedOnBottom | juce::Button::ConnectedOnTop);
         };
         setupZoomBtn(zoomInBtn);
         setupZoomBtn(zoomOutBtn);
         
-        zoomInBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.8); repaint(); };
-        zoomOutBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.25); repaint(); };
+        setOpaque(true);
+        startTimer(16); // ~60 FPS
     }
     ~SimpleWaveform() override { audioCore.getThumbnail(deckIdx).removeChangeListener(this); }
     
@@ -52,15 +48,10 @@ public:
         if (totalLen > 0.0) {
             double pos = audioCore.getDeckPosition(deckIdx);
             double visibleSeconds = zoomLevel;
-            float centerWeight = 0.5f;
-            double startTime = pos - (visibleSeconds * centerWeight);
-            
+            double startTime = pos - (visibleSeconds * 0.5);
             double clickTime = startTime + ((double)e.x / getWidth()) * visibleSeconds;
             if (deckIdx == 0) audioCore.seekDeckA(clickTime);
-            else if (deckIdx == 1) audioCore.seekDeckB(clickTime);
-            else audioCore.seekHandsFreeDeck(clickTime);
-            
-            // Update lastMouseX to current so drag starts from here
+            else audioCore.seekDeckB(clickTime);
             lastMouseX = e.x;
         }
     }
@@ -69,28 +60,17 @@ public:
         if (isDragging) {
             int deltaX = e.x - lastMouseX;
             lastMouseX = e.x;
-            
-            double visibleSeconds = zoomLevel; // Use dynamic zoom level
-            double secondsPerPixel = visibleSeconds / (double)getWidth();
-            double deltaSeconds = (double)deltaX * secondsPerPixel;
-            
+            double secondsPerPixel = zoomLevel / (double)getWidth();
             double currentPos = audioCore.getDeckPosition(deckIdx);
-            double newPos = juce::jlimit(0.0, audioCore.getDeckLength(deckIdx), currentPos - deltaSeconds);
-            
+            double newPos = juce::jlimit(0.0, audioCore.getDeckLength(deckIdx), currentPos - (deltaX * secondsPerPixel));
             if (deckIdx == 0) audioCore.seekDeckA(newPos);
             else audioCore.seekDeckB(newPos);
-            
-            if (!audioCore.isDeckPlaying(deckIdx)) {
-                audioCore.setDeckCuePoint(deckIdx, newPos);
-            }
+            if (!audioCore.isDeckPlaying(deckIdx)) audioCore.setDeckCuePoint(deckIdx, newPos);
             repaint();
         }
     }
 
-    void mouseUp(const juce::MouseEvent&) override {
-        isDragging = false;
-    }
-
+    void mouseUp(const juce::MouseEvent&) override { isDragging = false; }
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override {
         if (wheel.deltaY > 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.9);
         else if (wheel.deltaY < 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.1);
@@ -99,91 +79,83 @@ public:
     
     void paint(juce::Graphics& g) override {
         auto area = getLocalBounds();
-        g.setColour(juce::Colour(0xff0a0a0a));
-        g.fillRoundedRectangle(area.toFloat(), 4.0f);
+        g.fillAll(juce::Colour(0xff000000)); // Absolute black clear
 
         auto& thumb = audioCore.getThumbnail(deckIdx);
         double totalLen = audioCore.getDeckLength(deckIdx);
+        double thumbLen = thumb.getTotalLength();
         double pos      = audioCore.getDeckPosition(deckIdx);
 
-        if (totalLen > 0.0) {
+        if (totalLen > 0.0 && thumbLen > 0.0) {
             double visibleSeconds = zoomLevel;
-            // Original formula — allows negative startTime so the playhead
-            // stays perfectly centred and JUCE AudioThumbnail draws empty
-            // space for t < 0 (near track start). DO NOT clamp to 0.
             double startTime = pos - visibleSeconds * 0.5;
             double endTime   = startTime + visibleSeconds;
 
-            // Helper: time → pixel X (same origin as startTime)
             auto tx = [&](double t) -> float {
                 return (float)((t - startTime) / visibleSeconds) * (float)area.getWidth();
             };
 
-            // ── 1. Beat / Bar / Phrase Grid ──────────────────────────────────
+            // ── 1. Precise Beat Grid & Blocks ──────────────────────────────────
             double bpm = audioCore.getDeckBpm(deckIdx);
             if (bpm > 0.0) {
                 double beat = 60.0 / bpm;
                 double firstBeat = std::floor(startTime / beat) * beat;
+                juce::Colour deckCol = (deckIdx == 0 ? juce::Colours::cyan : juce::Colours::tomato);
+
                 for (double t = firstBeat; t <= endTime; t += beat) {
                     float gx = tx(t);
-                    if (gx < 0 || gx > area.getWidth()) continue;
+                    if (gx < -5.0f || gx > (float)area.getWidth() + 5.0f) continue;
+                    
                     int bn = (int)std::round(t / beat);
-                    if (bn % 16 == 0) {
-                        // Phrase line — bright cyan, 2 px wide
-                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.55f));
-                        g.fillRect(gx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
-                    } else if (bn % 4 == 0) {
-                        // Bar line — medium cyan
-                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.28f));
-                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                    bool isBar = (bn % 4 == 0);
+                    bool isPhrase = (bn % 16 == 0);
+
+                    // Beat Indicators (Top Blocks)
+                    if (isPhrase) {
+                        g.setColour(juce::Colours::white);
+                        g.fillRect(gx - 2.0f, 0.0f, 4.0f, 10.0f);
+                    } else if (isBar) {
+                        g.setColour(deckCol.brighter(0.5f));
+                        g.fillRect(gx - 1.5f, 0.0f, 3.0f, 7.0f);
                     } else {
-                        // Beat line — subtle white
-                        g.setColour(juce::Colours::white.withAlpha(0.08f));
-                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                        g.setColour(deckCol.withAlpha(0.4f));
+                        g.fillRect(gx - 1.0f, 0.0f, 2.0f, 4.0f);
                     }
+
+                    // Background Vertical Lines
+                    g.setColour(isBar ? deckCol.withAlpha(0.12f) : juce::Colours::white.withAlpha(0.04f));
+                    g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
                 }
             }
 
             // ── 2. Waveform ───────────────────────────────────────────────────
-            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.7f)
-                                     : juce::Colours::tomato.withAlpha(0.7f));
+            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.8f) : juce::Colours::tomato.withAlpha(0.8f));
             thumb.drawChannels(g, area.reduced(0, 5), startTime, endTime, 1.0f);
 
             // ── 3. Loop Region ────────────────────────────────────────────────
             if (audioCore.isDeckLoopEnabled(deckIdx)) {
-                double loopStart = audioCore.getDeckLoopStart(deckIdx);
-                double loopEnd   = loopStart + audioCore.getDeckLoopLength(deckIdx);
-                if (loopEnd > startTime && loopStart < endTime) {
-                    float lx = tx(std::max(loopStart, startTime));
-                    float rx = tx(std::min(loopEnd,   endTime));
-                    // Tinted fill
-                    g.setColour(juce::Colours::yellow.withAlpha(0.22f));
+                double lStart = audioCore.getDeckLoopStart(deckIdx);
+                double lEnd   = lStart + audioCore.getDeckLoopLength(deckIdx);
+                if (lEnd > startTime && lStart < endTime) {
+                    float lx = tx(std::max(lStart, startTime));
+                    float rx = tx(std::min(lEnd, endTime));
+                    g.setColour(juce::Colours::yellow.withAlpha(0.25f));
                     g.fillRect(lx, 0.0f, rx - lx, (float)area.getHeight());
-                    // Bracket vertical lines
-                    g.setColour(juce::Colours::yellow.withAlpha(0.80f));
-                    g.fillRect(lx,        0.0f, 2.0f, (float)area.getHeight());
-                    g.fillRect(rx - 2.0f, 0.0f, 2.0f, (float)area.getHeight());
-                    // Bracket corners (top & bottom)
-                    g.fillRect(lx,         0.0f,                          10.0f, 3.0f);
-                    g.fillRect(lx,         (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
-                    g.fillRect(rx - 10.0f, 0.0f,                          10.0f, 3.0f);
-                    g.fillRect(rx - 10.0f, (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
+                    g.setColour(juce::Colours::yellow);
+                    g.drawVerticalLine((int)lx, 0.0f, (float)area.getHeight());
+                    g.drawVerticalLine((int)rx, 0.0f, (float)area.getHeight());
                 }
             }
 
-            // ── 4. CUE Point ──────────────────────────────────────────────────
+            // ── 4. CUE ────────────────────────────────────────────────────────
             double cue = audioCore.getDeckCuePoint(deckIdx);
             if (cue >= startTime && cue <= endTime) {
                 float cx = tx(cue);
                 g.setColour(juce::Colours::orange);
-                g.fillRect(cx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
-                juce::Path tri;
-                tri.addTriangle(cx - 6, 0, cx + 6, 0, cx, 8);
+                g.drawVerticalLine((int)cx, 0.0f, (float)area.getHeight());
+                juce::Path tri; tri.addTriangle(cx - 6, 0, cx + 6, 0, cx, 8);
                 g.fillPath(tri);
             }
-            // NOTE: playhead line is drawn by MixerComponent::paintOverChildren()
-            // at the exact visual centre — do NOT duplicate it here.
-
         } else {
             g.setColour(juce::Colours::grey.withAlpha(0.2f));
             g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
@@ -191,9 +163,7 @@ public:
             g.drawText("DRAG TRACK HERE", area, juce::Justification::centred);
         }
     }
-    void changeListenerCallback(juce::ChangeBroadcaster*) override { 
-        juce::MessageManager::callAsync([this] { repaint(); }); 
-    }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override { juce::MessageManager::callAsync([this] { repaint(); }); }
     void timerCallback() override { repaint(); }
     
     void resized() override {
