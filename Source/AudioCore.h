@@ -349,6 +349,7 @@ private:
         juce::int64 loopStart = 0;
         juce::int64 loopLength = 0;
         int crossfadeSamples = 220; // 5ms in samples
+        juce::AudioBuffer<float> tailBuffer, headBuffer;
     };
 
     // PlaybackChannel: now defined AFTER CrossfadingLoopSource

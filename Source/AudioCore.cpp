@@ -173,7 +173,6 @@ void AudioCore::setDeckFilter(int deckIdx, float value) {
 
 void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    handleSyncLogic();
     auto* mainBuffer = bufferToFill.buffer;
     int start = bufferToFill.startSample;
     int num = bufferToFill.numSamples;
@@ -925,6 +924,8 @@ void AudioCore::CrossfadingLoopSource::prepareToPlay(int samplesPerBlockExpected
     currentSampleRate = sampleRate;
     crossfadeSamples = static_cast<int>(sampleRate * 0.005); // 5 milissegundos
     readerSource->prepareToPlay(samplesPerBlockExpected, sampleRate);
+    tailBuffer.setSize(2, samplesPerBlockExpected + crossfadeSamples);
+    headBuffer.setSize(2, samplesPerBlockExpected + crossfadeSamples);
 }
 
 void AudioCore::CrossfadingLoopSource::releaseResources() { readerSource->releaseResources(); }
@@ -968,12 +969,12 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
             int samplesToProcess = juce::jmin(samplesLeft, (int)(end - pos));
             if (samplesToProcess <= 0) { readerSource->setNextReadPosition(start); continue; }
 
-            juce::AudioBuffer<float> tailBuffer(bufferToFill.buffer->getNumChannels(), samplesToProcess);
+            tailBuffer.setSize(bufferToFill.buffer->getNumChannels(), samplesToProcess, false, false, true);
             tailBuffer.clear();
             juce::AudioSourceChannelInfo tailInfo(&tailBuffer, 0, samplesToProcess);
             readerSource->getNextAudioBlock(tailInfo);
             
-            juce::AudioBuffer<float> headBuffer(bufferToFill.buffer->getNumChannels(), samplesToProcess);
+            headBuffer.setSize(bufferToFill.buffer->getNumChannels(), samplesToProcess, false, false, true);
             headBuffer.clear();
             juce::AudioSourceChannelInfo headInfo(&headBuffer, 0, samplesToProcess);
             

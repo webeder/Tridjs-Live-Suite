@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "AudioCore.h"
 #include "TrackBrowserComponent.h"
+#include "VstControlWidget.h"
 
 // --- Helper Components ---
 
@@ -229,6 +230,120 @@ private:
     int deckIdx;
 };
 
+class MicControlWidget : public juce::Component, private juce::Timer {
+public:
+    struct MicLF : public juce::LookAndFeel_V4 {
+        juce::Font getTextButtonFont(juce::TextButton&, int) override {
+            return juce::Font(13.0f, juce::Font::bold); 
+        }
+
+        void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                             float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
+            // Forçar área quadrada para evitar distorção (knob redondo)
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
+            
+            auto radius = bounds.getWidth() / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
+
+            // 1. Contorno claro e bem visível
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.drawEllipse(bounds, 2.0f);
+
+            // 2. Corpo do Knob mais claro para destaque
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.5f));
+            
+            // Brilho no topo do knob
+            g.setColour(juce::Colours::white.withAlpha(0.1f));
+            g.fillEllipse(bounds.reduced(4).translated(0, -2));
+
+            // 3. Indicador (Tick) em branco puro
+            g.setColour(juce::Colours::white);
+            juce::Path p;
+            p.addRoundedRectangle(-2.5f, -radius + 2, 5.0f, radius * 0.6f, 1.5f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center));
+            g.fillPath(p);
+        }
+    };
+    MicLF micLF;
+
+    MicControlWidget(AudioCore& ac) : audioCore(ac) {
+        micBtn.setButtonText("MIC");
+        micBtn.setClickingTogglesState(true);
+        micBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
+        micBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
+        micBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+        micBtn.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+        micBtn.setLookAndFeel(&micLF);
+        micBtn.onClick = [this] { audioCore.setMicEnabled(micBtn.getToggleState()); };
+        addAndMakeVisible(micBtn);
+
+        micKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        micKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        micKnob.setLookAndFeel(&micLF);
+        micKnob.setRange(0.0, 1.0, 0.01);
+        micKnob.setValue(audioCore.getMicVolume());
+        micKnob.onValueChange = [this] { audioCore.setMicVolume((float)micKnob.getValue()); };
+        addAndMakeVisible(micKnob);
+
+        startTimer(30);
+    }
+
+    ~MicControlWidget() override {
+        micBtn.setLookAndFeel(nullptr);
+        micKnob.setLookAndFeel(nullptr);
+    }
+
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds();
+        
+        // Pequeno fundo para agrupar
+        g.setColour(juce::Colour(0xff151515));
+        g.fillRoundedRectangle(area.toFloat(), 6.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.drawRoundedRectangle(area.toFloat(), 6.0f, 1.0f);
+
+        // VU Meter horizontal
+        auto vuArea = juce::Rectangle<int>(micBtn.getRight() + 5, 8, area.getWidth() - micBtn.getRight() - 15, 8);
+        g.setColour(juce::Colours::black);
+        g.fillRoundedRectangle(vuArea.toFloat(), 2.0f);
+        
+        if (audioCore.isMicEnabled()) {
+            float level = audioCore.getInputLevel();
+            int w = (int)(vuArea.getWidth() * level);
+            g.setColour(juce::Colours::lime);
+            g.fillRoundedRectangle(vuArea.withWidth(w).toFloat(), 2.0f);
+        }
+        
+        g.setColour(juce::Colours::grey);
+        g.setFont(10.0f);
+        // Removido o texto "MIC" debaixo pois agora está dentro do botão
+    }
+
+    void resized() override {
+        auto area = getLocalBounds().reduced(8);
+        micBtn.setBounds(area.removeFromLeft(50).withSizeKeepingCentre(44, 44).withY(area.getY() + 10));
+        
+        auto rightSide = area;
+        rightSide.removeFromTop(20); 
+        // Forçar o knob a ser um quadrado centralizado para não distorcer
+        int side = std::min(rightSide.getWidth(), rightSide.getHeight());
+        micKnob.setBounds(rightSide.withSizeKeepingCentre(side, side));
+    }
+
+    void timerCallback() override {
+        micBtn.setToggleState(audioCore.isMicEnabled(), juce::dontSendNotification);
+        repaint();
+    }
+
+private:
+    AudioCore& audioCore;
+    juce::TextButton micBtn;
+    juce::Slider micKnob;
+};
+
 class JogWheel : public juce::Component, private juce::Timer {
 public:
     JogWheel(AudioCore& ac, int idx, juce::Colour accent, bool showRemaining) 
@@ -305,7 +420,7 @@ private:
     juce::Colour accentColour; juce::Label title, beats; 
 };
 
-class DeckSection : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer {
+class DeckSection : public juce::Component, private juce::Timer {
 public:
     DeckSection(AudioCore& ac, int idx, bool isLeft) 
         : audioCore(ac), deckIdx(idx), leftSide(isLeft), jog(ac, idx, isLeft ? juce::Colours::cyan : juce::Colours::tomato, isLeft),
@@ -409,10 +524,6 @@ public:
         startTimer(16);
     }
 
-    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
-    void filesDropped(const juce::StringArray& files, int, int) override {
-        if (files.size() > 0) (deckIdx == 0 ? audioCore.loadDeckA(juce::File(files[0])) : audioCore.loadDeckB(juce::File(files[0])));
-    }
     void setupButton(juce::TextButton& b, const juce::String& t, juce::Colour c) { addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, c); }
     void paint(juce::Graphics& g) override { g.setColour(juce::Colour(0xff151515)); g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f); }
     void resized() override {
@@ -431,7 +542,7 @@ public:
         else { pitchSlider.setBounds(area.removeFromRight(35).reduced(5, 10)); loopControls.setBounds(area.removeFromRight(110).withHeight(85).withY(pitchSlider.getBottom() - 85)); vu.setBounds(area.removeFromLeft(12).reduced(0, 20)); }
         jog.setBounds(area.reduced(10));
     }
-private:
+
     void timerCallback() override {
         bpmLabel.setText(juce::String(audioCore.getDeckBpm(deckIdx), 1), juce::dontSendNotification);
         deckLabel.setText(audioCore.getDeckName(deckIdx).isEmpty() ? (deckIdx == 0 ? "DECK A" : "DECK B") : audioCore.getDeckName(deckIdx), juce::dontSendNotification);
@@ -458,12 +569,20 @@ private:
 
 class MixerCenterSection : public juce::Component {
 public:
-    MixerCenterSection(AudioCore& ac) : audioCore(ac), fxA(ac, 0), fxB(ac, 1) {
+    MixerCenterSection(AudioCore& ac) 
+        : audioCore(ac), 
+          fxA(ac, 0), fxB(ac, 1),
+          micControl(ac),
+          vstControl(ac.getVocalVstChain(), ac.getVstManager())
+    {
         setLookAndFeel(&lookAndFeel);
         
         addAndMakeVisible(content);
         content.addAndMakeVisible(fxA);
         content.addAndMakeVisible(fxB);
+
+        content.addAndMakeVisible(micControl);
+        content.addAndMakeVisible(vstControl);
 
 
         // Side Knobs
@@ -658,6 +777,12 @@ public:
         layoutKnobCol(knobsB, curX, mainY, sideW, mainH);
 
         crossfader.setBounds((w - 400) / 2, h - 80, 400, 50);
+
+        // Posicionar controles de Mic e VST mais à ESQUERDA (no espaço indicado no print)
+        int cfY = h - 85;
+        
+        vstControl.setBounds(40, cfY, 95, 75);
+        micControl.setBounds(145, cfY, 230, 85);
     }
 
 private:
@@ -669,26 +794,26 @@ private:
         }
         void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                              float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
-            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(6);
-            auto radius = std::min(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
             
-            // Minimalist Dark Circle
-            g.setColour(juce::Colour(0xff121212));
-            g.fillEllipse(bounds);
-            g.setColour(juce::Colours::black);
+            auto radius = bounds.getWidth() / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
+
+            // 1. Contorno claro e bem visível
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
             g.drawEllipse(bounds, 1.5f);
 
-            // Simple indicator tick (like the reference image)
-            auto lineW = 3.5f;
-            auto thumbWidth = lineW;
+            // 2. Corpo do Knob mais claro
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.0f));
+
+            // 3. Indicador (Tick) em branco puro
+            g.setColour(juce::Colours::white);
             juce::Path p;
-            p.addRoundedRectangle(-thumbWidth * 0.5f, -radius, thumbWidth, radius * 0.6f, 1.0f);
-            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
-            
-            // Use cyan for the tick to keep the theme, or light grey if preferred. 
-            // User's right image shows light grey/silver.
-            g.setColour(juce::Colour(0xffcccccc)); 
+            p.addRoundedRectangle(-2.0f, -radius + 2, 4.0f, radius * 0.5f, 1.0f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center));
             g.fillPath(p);
         }
 
@@ -808,47 +933,38 @@ private:
     struct FxKnobLookAndFeel : public CustomLookAndFeel {
         void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                              float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
-            // Force perfect square so circle is always symmetric
-            float side = (float)std::min(width, height) - 8.0f;
-            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side);
-            auto radius = side / 2.0f;
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
+            auto radius = bounds.getWidth() / 2.0f;
             auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
             
-            // Neon Pink / Magenta theme for FX
             juce::Colour neonColor = juce::Colour(0xffff00ff); 
             bool isActive = slider.getProperties()["isActive"];
 
-            // Dark Outer Ring
-            g.setColour(juce::Colour(0xff0d0d0d));
-            g.fillEllipse(bounds);
-            
-            // Inner Circle
-            auto innerBounds = bounds.reduced(6);
-            g.setColour(juce::Colour(0xff1a1a1a));
-            g.fillEllipse(innerBounds);
-            
-            // Indicator and Arc
-            float lineW = 4.0f;
-            float arcRadius = radius - lineW * 0.5f - 2;
-            
-            // Value Arc (Pink)
-            if (isActive) {
-                g.setColour(neonColor.withAlpha(0.2f));
-                juce::Path bgArc;
-                bgArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
-                g.strokePath(bgArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            // 1. Contorno claro
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.drawEllipse(bounds, 1.5f);
 
-                g.setColour(neonColor);
+            // 2. Corpo do Knob
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.0f));
+            
+            // Value Arc (Neon)
+            if (isActive) {
+                float lineW = 3.0f;
+                float arcRadius = radius - 1.5f;
+                g.setColour(neonColor.withAlpha(0.8f));
                 juce::Path valueArc;
-                valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, toAngle, true);
+                valueArc.addCentredArc(center.x, center.y, arcRadius, arcRadius, 0.0f, rotaryStartAngle, toAngle, true);
                 g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
 
-            // Central Indicator Tick
+            // 3. Indicador (Tick)
+            g.setColour(juce::Colours::white);
             juce::Path p;
-            p.addRoundedRectangle(-lineW * 0.5f, -radius + 4, lineW, radius * 0.5f, 1.5f);
-            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
-            g.setColour(isActive ? neonColor : juce::Colours::grey);
+            p.addRoundedRectangle(-2.0f, -radius + 2, 4.0f, radius * 0.5f, 1.0f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center.x, center.y));
             g.fillPath(p);
         }
     };
@@ -887,7 +1003,7 @@ private:
                 label.setText(name, juce::dontSendNotification);
                 label.setFont(juce::Font(18.0f, juce::Font::bold));
                 label.setJustificationType(juce::Justification::centred);
-                label.setColour(juce::Label::textColourId, juce::Colours::grey.withAlpha(0.6f));
+                label.setColour(juce::Label::textColourId, juce::Colours::white);
             }
             ~FxSlot() { knob.setLookAndFeel(nullptr); }
 
@@ -988,7 +1104,7 @@ private:
             lbl->setText(labelsText[i], juce::dontSendNotification);
             lbl->setFont(juce::Font(12.0f, juce::Font::bold));
             lbl->setJustificationType(juce::Justification::centred);
-            lbl->setColour(juce::Label::textColourId, juce::Colours::grey);
+            lbl->setColour(juce::Label::textColourId, juce::Colours::white);
 
             auto* s = knobs.add(new juce::Slider());
             content.addAndMakeVisible(s);
@@ -1055,16 +1171,25 @@ private:
     juce::OwnedArray<juce::Slider> knobsA, knobsB;
     juce::Slider faderA, faderB, crossfader;
     juce::TextButton cueA, cueB;
+    MicControlWidget micControl;
+    VstControlWidget vstControl;
 
 };
 
 class MixerComponent : public juce::Component, 
                       public juce::FileDragAndDropTarget,
-                      public juce::DragAndDropTarget {
+                      public juce::DragAndDropTarget,
+                      private juce::Timer {
 public:
     MixerComponent(AudioCore& ac, TrackBrowserComponent* b) 
         : audioCore(ac), browser(b), waveA(ac, 0), waveB(ac, 1), deckA(ac, 0, true), deckB(ac, 1, false), mixer(ac) {
         addAndMakeVisible(waveA); addAndMakeVisible(waveB); addAndMakeVisible(deckA); addAndMakeVisible(deckB); addAndMakeVisible(mixer);
+        startTimer(30); // Para Sync e outras lógicas de UI
+    }
+    
+    void timerCallback() override {
+        // Mover a lógica de Sync para cá para evitar travamentos na thread de áudio
+        audioCore.handleSyncLogic();
     }
     
     // External File Drag (Explorer)
