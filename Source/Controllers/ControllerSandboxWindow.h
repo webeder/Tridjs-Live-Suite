@@ -1,8 +1,10 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <thread>
 #include "Core/ControllerRouter.h"
 #include "Core/ControllerEvent.h"
+#include "Core/MixxxMappingParser.h"
 #include "MockAudioEngine.h"
 
 // ============================================================
@@ -35,9 +37,11 @@ public:
         // Wire MockAudioEngine logging to our UI
         mockEngine.setLogCallback([this](const juce::String& msg)
         {
-            juce::MessageManager::callAsync([this, msg]()
+            juce::Component::SafePointer<SandboxContent> safeContent (content.get());
+            juce::MessageManager::callAsync([safeContent, msg]()
             {
-                content->appendEngineLog(msg);
+                if (safeContent != nullptr)
+                    safeContent->appendEngineLog(msg);
             });
         });
 
@@ -77,6 +81,11 @@ public:
             addAndMakeVisible(refreshBtn);
             refreshBtn.setButtonText("Refresh");
             refreshBtn.addListener(this);
+
+            addAndMakeVisible(loadMappingBtn);
+            loadMappingBtn.setButtonText("📂 Load Mixxx XML");
+            loadMappingBtn.addListener(this);
+            loadMappingBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff4a4a4a));
 
             // --- Log Panels ---
             setupLogPanel(midiInLog, midiInLabel, "MIDI IN", juce::Colour(0xff003300));
@@ -136,6 +145,7 @@ public:
             auto topRow = area.removeFromTop(30);
             midiDeviceLabel.setBounds(topRow.removeFromLeft(80));
             refreshBtn.setBounds(topRow.removeFromRight(80).reduced(2));
+            loadMappingBtn.setBounds(topRow.removeFromRight(150).reduced(2));
             midiDeviceCombo.setBounds(topRow.reduced(4));
 
             area.removeFromTop(6);
@@ -174,7 +184,7 @@ public:
         // Header controls
         juce::Label midiDeviceLabel;
         juce::ComboBox midiDeviceCombo;
-        juce::TextButton refreshBtn, clearBtn;
+        juce::TextButton refreshBtn, clearBtn, loadMappingBtn;
         juce::TextButton testPlayBtn, testVolumeBtn, testEqBtn, testCrossBtn;
 
         // Log panels (label + text area)
@@ -207,6 +217,11 @@ public:
         void appendTo(juce::TextEditor& editor, const juce::String& msg)
         {
             auto ts = juce::Time::getCurrentTime().toString(false, true, true, true);
+            
+            // Limit text length to prevent UI hang
+            if (editor.getTotalNumChars() > 5000)
+                editor.setText(editor.getText().getLastCharacters(2500), false);
+
             editor.moveCaretToEnd();
             editor.insertTextAtCaret("[" + ts + "]  " + msg + "\n");
         }
@@ -240,6 +255,10 @@ public:
             if (btn == &refreshBtn)
             {
                 refreshMidiDevices();
+            }
+            else if (btn == &loadMappingBtn)
+            {
+                window.chooseAndLoadMapping();
             }
             else if (btn == &clearBtn)
             {
@@ -306,15 +325,27 @@ public:
 
     void handleIncomingMidiMessage(juce::MidiInput*, const juce::MidiMessage& msg) override
     {
-        // Log MIDI in on message thread
-        juce::String hex;
-        for (int i = 0; i < msg.getRawDataSize(); ++i)
-            hex += juce::String::toHexString(msg.getRawData()[i]).toUpperCase().paddedLeft('0', 2) + " ";
+        static int messageCounter = 0;
+        messageCounter++;
 
-        juce::MessageManager::callAsync([this, hex, msg]()
+        // Only log 1 out of 4 CC messages to prevent flood, but log all Note messages
+        bool shouldLog = msg.isNoteOn() || msg.isNoteOff() || (messageCounter % 4 == 0);
+
+        if (shouldLog)
         {
-            content->appendMidiIn("MIDI: " + hex.trim() + "  (" + msg.getDescription() + ")");
-        });
+            juce::String hex;
+            for (int i = 0; i < msg.getRawDataSize(); ++i)
+                hex += juce::String::toHexString(msg.getRawData()[i]).toUpperCase().paddedLeft('0', 2) + " ";
+
+            // Use a SafePointer to avoid crashing if the window is closed
+            juce::Component::SafePointer<SandboxContent> safeContent (content.get());
+
+            juce::MessageManager::callAsync([safeContent, hex, msg]()
+            {
+                if (safeContent != nullptr)
+                    safeContent->appendMidiIn("MIDI: " + hex.trim() + "  (" + msg.getDescription() + ")");
+            });
+        }
 
         // Convert raw MIDI to a ControllerInputEvent and push to the EventBus
         ControllerInputEvent ev = rawMidiToEvent(msg);
@@ -322,9 +353,12 @@ public:
         {
             router.pushEvent(ev);
             juce::String evStr = controllerEventToString(ev);
-            juce::MessageManager::callAsync([this, evStr]()
+            
+            juce::Component::SafePointer<SandboxContent> safeContent (content.get());
+            juce::MessageManager::callAsync([safeContent, evStr]()
             {
-                content->appendEventBus("PUSH -> " + evStr);
+                if (safeContent != nullptr)
+                    safeContent->appendEventBus("PUSH -> " + evStr);
             });
         }
     }
@@ -344,10 +378,18 @@ public:
     void timerCallback() override
     {
         ControllerInputEvent ev;
+        int count = 0;
+        const int maxLogsPerTick = 10;
+
         while (router.popEvent(ev))
         {
-            content->appendEventBus("POP   -> " + controllerEventToString(ev));
+            if (count < maxLogsPerTick)
+                content->appendEventBus("POP   -> " + controllerEventToString(ev));
+            else if (count == maxLogsPerTick)
+                content->appendEventBus("... (throttled extra events this tick)");
+
             mockEngine.processEvent(ev);
+            count++;
         }
     }
 
@@ -356,15 +398,143 @@ private:
     std::unique_ptr<juce::MidiInput> midiInput;
     ControllerRouter router;
     MockAudioEngine mockEngine;
+    MixxxMappingParser mappingParser;
+
+    void chooseAndLoadMapping()
+    {
+        chooser = std::make_unique<juce::FileChooser>("Select Mixxx MIDI XML Mapping...",
+                                                     juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+                                                     "*.midi.xml");
+        
+        auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+        
+        chooser->launchAsync(flags, [this](const juce::FileChooser& fc)
+        {
+            auto file = fc.getResult();
+            if (file.existsAsFile())
+            {
+                content->appendMidiIn("--- LOADING: " + file.getFileName() + " ---");
+                
+                // Parse in background to avoid hanging the UI thread
+                std::thread([this, file]() {
+                    if (mappingParser.loadXml(file))
+                    {
+                        auto count = mappingParser.getMappingCount();
+                        juce::MessageManager::callAsync([this, count]() {
+                            content->appendMidiIn("--- SUCCESS: Loaded " + juce::String(count) + " mappings ---");
+                        });
+                    }
+                    else
+                    {
+                        juce::MessageManager::callAsync([this]() {
+                            content->appendMidiIn("--- ERROR: Failed to parse XML! ---");
+                        });
+                    }
+                }).detach();
+            }
+        });
+    }
+
+    std::unique_ptr<juce::FileChooser> chooser;
+    std::map<int, std::map<int, int>> msbState; 
+    juce::uint32 lastJsLogTime = 0; // For throttling script logs
 
     // ------------------------------------------------------------------
     // Raw MIDI → ControllerInputEvent (generic mapping for sandbox)
     // In production this will be done by the Mixxx JS Engine
     // ------------------------------------------------------------------
-    static ControllerInputEvent rawMidiToEvent(const juce::MidiMessage& msg)
+    ControllerInputEvent rawMidiToEvent(const juce::MidiMessage& msg)
     {
         ControllerInputEvent ev;
-        int ch = msg.getChannel() - 1; // 0-indexed channel → deck index
+        int status = msg.getRawData()[0];
+        int midino = msg.getRawData()[1];
+        int val7bit = msg.getRawData()[2];
+
+        // 1. Try to find a mapping in the Mixxx XML
+        MixxxControl ctrl = mappingParser.getControl(status, midino);
+        
+        if (ctrl.key.isNotEmpty())
+        {
+            // Parse deck index from group like "[Channel1]"
+            int chNum = 1;
+            if (ctrl.group.startsWithIgnoreCase("[Channel"))
+                chNum = ctrl.group.substring(8, ctrl.group.length() - 1).getIntValue();
+            
+            ev.deckIndex = juce::jlimit(0, 3, chNum - 1);
+
+            // Handle 14-bit High Resolution MIDI
+            if (ctrl.is14BitMSB)
+            {
+                msbState[status][midino] = val7bit;
+                return ev; // Wait for LSB
+            }
+            else if (ctrl.is14BitLSB)
+            {
+                int msbMidino = midino - 0x20;
+                if (msbMidino >= 0 && msbState.count(status) && msbState[status].count(msbMidino))
+                {
+                    int msb = msbState[status][msbMidino];
+                    float val14bit = ((msb << 7) | val7bit) / 16383.0f;
+                    ev.value = val14bit;
+                }
+                else {
+                    ev.value = val7bit / 127.0f; // Fallback to 7-bit
+                }
+            }
+            else
+            {
+                ev.value = val7bit / 127.0f;
+            }
+
+            // Map Mixxx keys to our internal EventTypes
+            if (ctrl.key == "play")            ev.type = ControllerEventType::Play;
+            else if (ctrl.key == "cue_default") ev.type = ControllerEventType::Cue;
+            else if (ctrl.key == "volume")      ev.type = ControllerEventType::Volume;
+            else if (ctrl.key == "pregain")     ev.type = ControllerEventType::Gain;
+            else if (ctrl.key == "rate")        ev.type = ControllerEventType::Pitch;
+            else if (ctrl.key.containsIgnoreCase("filter") || ctrl.key == "super1") ev.type = ControllerEventType::Filter;
+            else if (ctrl.key.containsIgnoreCase("parameter1")) ev.type = ControllerEventType::EQLow;
+            else if (ctrl.key.containsIgnoreCase("parameter2")) ev.type = ControllerEventType::EQMid;
+            else if (ctrl.key.containsIgnoreCase("parameter3")) ev.type = ControllerEventType::EQHigh;
+            else if (ctrl.key == "crossfader")  ev.type = ControllerEventType::Crossfader;
+            else if (ctrl.key == "sync_enabled") ev.type = ControllerEventType::Sync;
+            else if (ctrl.key == "loop_in")     ev.type = ControllerEventType::LoopIn;
+            else if (ctrl.key == "loop_out")    ev.type = ControllerEventType::LoopOut;
+            else if (ctrl.key == "reloop_toggle") ev.type = ControllerEventType::Reloop;
+            else if (ctrl.key == "slip_enabled") ev.type = ControllerEventType::Slip;
+            else if (ctrl.isScriptBinding)
+            {
+                // Auto-detect jog wheel scripts to show them in the sandbox logs
+                if (ctrl.key.containsIgnoreCase("jog"))
+                {
+                    ev.type = ControllerEventType::JogScratch;
+                    ev.value = (val7bit - 64.0f) / 10.0f; // Standard relative relative encoding
+                }
+                else
+                {
+                    ev.type = ControllerEventType::Unknown;
+                    
+                    // Throttle script logs to avoid hanging the UI thread
+                    auto now = juce::Time::getMillisecondCounter();
+                    if (now - lastJsLogTime > 100)
+                    {
+                        lastJsLogTime = now;
+                        juce::String key = ctrl.key;
+                        juce::Component::SafePointer<SandboxContent> safeContent (content.get());
+                        juce::MessageManager::callAsync([safeContent, key]() {
+                            if (safeContent != nullptr) safeContent->appendMidiIn("JS BINDING: " + key);
+                        });
+                    }
+                }
+            }
+
+            return ev;
+        }
+
+        // 2. Fallback to hardcoded basic mapping if no XML is loaded
+        int ch = msg.getChannel();
+        if (ch >= 1 && ch <= 4) ev.deckIndex = ch - 1;
+        else ev.deckIndex = (ch - 1) % 4;
 
         if (msg.isNoteOn())
         {
@@ -381,17 +551,33 @@ private:
         else if (msg.isController())
         {
             int cc = msg.getControllerNumber();
-            float val = msg.getControllerValue() / 127.0f;
+            float rawVal = (float)msg.getControllerValue();
+            float val = rawVal / 127.0f;
+
             if (cc == 19)       { ev.type = ControllerEventType::Volume;     ev.value = val; }
-            else if (cc == 31)  { ev.type = ControllerEventType::Crossfader; ev.value = val; }
+            else if (cc == 31)  
+            { 
+                // Discriminator: CC 31 is Crossfader on Ch 7, but Jog on Decks 1-4
+                if (msg.getChannel() == 7)
+                    ev.type = ControllerEventType::Crossfader;
+                else
+                    ev.type = ControllerEventType::JogScratch;
+
+                ev.value = (msg.getChannel() == 7) ? val : (rawVal - 64.0f) / 10.0f;
+            }
             else if (cc == 23)  { ev.type = ControllerEventType::EQLow;      ev.value = val; }
             else if (cc == 24)  { ev.type = ControllerEventType::EQMid;      ev.value = val; }
             else if (cc == 25)  { ev.type = ControllerEventType::EQHigh;     ev.value = val; }
             else if (cc == 26)  { ev.type = ControllerEventType::Filter;     ev.value = val; }
             else if (cc == 0)   { ev.type = ControllerEventType::Pitch;      ev.value = val; }
+            
+            else if (cc == 33 || cc == 34) 
+            {
+                ev.type = (cc == 33) ? ControllerEventType::JogScratch : ControllerEventType::JogBend;
+                ev.value = (rawVal - 64.0f) / 10.0f; 
+            }
         }
 
-        ev.deckIndex = juce::jlimit(0, 3, ch);
         return ev;
     }
 
@@ -410,12 +596,19 @@ private:
             case ControllerEventType::EQLow:      typeName = "EQ_LOW"; break;
             case ControllerEventType::Filter:     typeName = "FILTER"; break;
             case ControllerEventType::Pitch:      typeName = "PITCH"; break;
+            case ControllerEventType::Gain:       typeName = "GAIN/TRIM"; break;
+            case ControllerEventType::LoopIn:     typeName = "LOOP_IN"; break;
+            case ControllerEventType::LoopOut:    typeName = "LOOP_OUT"; break;
+            case ControllerEventType::Reloop:     typeName = "RELOOP"; break;
+            case ControllerEventType::Slip:       typeName = "SLIP"; break;
             case ControllerEventType::JogScratch: typeName = "JOG_SCRATCH"; break;
             case ControllerEventType::JogBend:    typeName = "JOG_BEND"; break;
             case ControllerEventType::HotCue:     typeName = "HOT_CUE"; break;
             default:                              typeName = "UNKNOWN"; break;
         }
-        return "{ type=" + typeName + " deck=" + juce::String(ev.deckIndex) + " val=" + juce::String(ev.value, 3) + " }";
+        
+        juce::String deckChar = juce::String::charToString((char)('A' + ev.deckIndex));
+        return "{ type=" + typeName + " deck=" + deckChar + " (idx=" + juce::String(ev.deckIndex) + ") val=" + juce::String(ev.value, 3) + " }";
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSandboxWindow)

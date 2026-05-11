@@ -31,24 +31,7 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
       juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\config.png"));
   deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
       deviceManager, 0, 2, 2, 2, true, true, true, true);
-
-  // MIDI Device selector (Moved from LEARN to CONFIG)
-  midiDeviceLabel.setText("MIDI INPUT DEVICE:", juce::dontSendNotification);
-  midiDeviceLabel.setColour(juce::Label::textColourId,
-                            juce::Colours::lightgrey);
-  configContent.addAndMakeVisible(midiDeviceLabel);
-
-  deviceManagerCombo.addItem("-- Select MIDI --", 1);
-  auto midiDevices = juce::MidiInput::getAvailableDevices();
-  for (int i = 0; i < midiDevices.size(); ++i)
-    deviceManagerCombo.addItem(midiDevices[i].name, i + 2);
-  deviceManagerCombo.setSelectedId(1);
-  deviceManagerCombo.onChange = [this] {
-    if (onMidiDeviceIndexChanged)
-      onMidiDeviceIndexChanged(deviceManagerCombo.getSelectedId() - 1);
-  };
-  configContent.addAndMakeVisible(deviceManagerCombo);
-
+  
   configContent.addAndMakeVisible(*deviceSelector);
 
   // ===== FX SLOTS (EFFECTS TAB) =====
@@ -350,9 +333,6 @@ void FxRackComponent::resized() {
 
   // ===== CONFIG TAB =====
   auto configArea = configContent.getLocalBounds().reduced(10);
-  midiDeviceLabel.setBounds(configArea.removeFromTop(20));
-  deviceManagerCombo.setBounds(configArea.removeFromTop(30));
-  configArea.removeFromTop(10);
   deviceSelector->setBounds(configArea);
 }
 
@@ -444,7 +424,7 @@ int FxRackComponent::getLearningRowIndex() const {
 }
 
 juce::String FxRackComponent::getCurrentDeviceName() const {
-  return deviceManagerCombo.getText();
+  return "N/A"; // Or retrieve from AudioDeviceManager
 }
 
 void FxRackComponent::updateFxDisplay(int fxIndex, float amount, bool enabled) {

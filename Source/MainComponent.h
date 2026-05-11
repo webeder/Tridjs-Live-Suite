@@ -25,6 +25,10 @@ class ControllerSandboxWindow;
 #include "AnalysisManager.h"
 #include "TrackBrowserComponent.h"
 #include "DriveManager.h"
+#include "Controllers/Core/ControllerRouter.h"
+#include "Controllers/Core/MixxxMappingParser.h"
+#include "Controllers/Professional/Mixxx/MixxxJSEngine.h"
+#include "Controllers/ControllerManagerWindow.h"
 
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
@@ -78,6 +82,8 @@ public:
     void navegarParaAba(int tabIndex);
     void setSaveOnQuit(bool shouldSave) { saveOnQuit = shouldSave; }
     void openControllerSandbox();
+    void showControllerManager();
+    void loadControllerMapping(const juce::File& xmlFile);
 
 private:
     bool saveOnQuit = true;
@@ -121,6 +127,16 @@ private:
     
     juce::ApplicationCommandManager commandManager;
     std::unique_ptr<ControllerSandboxWindow> sandboxWindow;
+
+    // Controller Integration
+    ControllerRouter controllerRouter;
+    MixxxMappingParser mixxxParser;
+    std::unique_ptr<MixxxJSEngine> jsEngine;
+    std::map<int, std::map<int, int>> msbState; 
+    void processControllerEvents();
+    void loadFlx10Mapping();
+
+    std::unique_ptr<ControllerManagerWindow> controllerManagerWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

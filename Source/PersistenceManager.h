@@ -16,6 +16,14 @@ public:
         auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
         appDir.getChildFile("Mappers").createDirectory();
         appDir.getChildFile("data").createDirectory();
+        getMappingsFolder().createDirectory();
+    }
+
+    juce::File getMappingsFolder()
+    {
+        return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+            .getChildFile("tridjs_lifeStudio")
+            .getChildFile("Mappings");
     }
 
     void saveSettings(float masterVol, float trackVol, int inputMode = 0, const juce::String& serialPort = "", bool serialLogEnabled = true)

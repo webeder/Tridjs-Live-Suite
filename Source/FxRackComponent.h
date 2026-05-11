@@ -341,13 +341,11 @@ public:
     juce::TextButton removeRgbBrushBtn { "REMOVE EFFECT" };
     juce::TextEditor presetNameEdit;
     juce::Label presetNameLabel { {}, "SESSION NAME:" };
-    juce::Label midiDeviceLabel;
     juce::ComboBox commandCombo;
     juce::Viewport targetViewport;
     juce::Component targetListContent;
     std::vector<std::unique_ptr<juce::TextButton>> fxTargetBtns;
     juce::Component midiLearnContent;
-    juce::ComboBox deviceManagerCombo;
     juce::ImageButton saveMidiBtn, openMidiBtn;
     juce::Image diskIcon, openIcon;
     juce::Viewport mappingViewport;

@@ -467,16 +467,18 @@ public:
         };
 
         loopControls.onInPressed = [this, updateLoopWithCurrentBeats] {
+            // IN = Shrink loop (halve beats)
             if (currentBeatIdx > 0) {
                 currentBeatIdx--;
-                updateLoopWithCurrentBeats(true);
+                updateLoopWithCurrentBeats(audioEngine.isDeckLoopEnabled(deckIdx));
             }
         };
 
         loopControls.onOutPressed = [this, updateLoopWithCurrentBeats] {
-            if (currentBeatIdx < 10) { // 0.03125 to 32 is 11 options (0 to 10)
+            // OUT = Grow loop (double beats)
+            if (currentBeatIdx < 10) {
                 currentBeatIdx++;
-                updateLoopWithCurrentBeats(true);
+                updateLoopWithCurrentBeats(audioEngine.isDeckLoopEnabled(deckIdx));
             }
         };
 
@@ -538,13 +540,16 @@ public:
         bool sync = audioCore.isSyncEnabled(deckIdx);
         syncBtn.setColour(juce::TextButton::buttonColourId, sync ? juce::Colours::white : juce::Colour(0xff222222));
         syncBtn.setColour(juce::TextButton::textColourOffId, sync ? juce::Colour(0xffcccc00) : juce::Colours::white);
+        
+        // SYNC Pitch Slider from Hardware/Engine
+        pitchSlider.setValue(audioCore.getDeckPitch(deckIdx), juce::dontSendNotification);
     }
     AudioCore& audioCore; int deckIdx; bool leftSide; juce::Label deckLabel, bpmLabel; juce::TextButton badge; JogWheel jog; VUMeter vu; juce::Slider pitchSlider; juce::TextButton playBtn, cueBtn, syncBtn, revBtn, ejectBtn; LoopControlGroup loopControls;
     double loopInPoint = 0.0;
     int currentBeatIdx = 7; // Default 4 beats (Index 7)
 };
 
-class MixerCenterSection : public juce::Component {
+class MixerCenterSection : public juce::Component, private juce::Timer {
 public:
     MixerCenterSection(AudioCore& ac) 
         : audioCore(ac), 
@@ -580,6 +585,30 @@ public:
         crossfader.onValueChange = [this] { audioCore.setCrossfaderPosition((float)crossfader.getValue()); };
         crossfader.setRange(0.0, 1.0);
         crossfader.setValue(0.5);
+        
+        startTimer(30);
+    }
+
+    void timerCallback() override {
+        // Sync Gain
+        knobsA[0]->setValue(audioCore.getDeckGain(0), juce::dontSendNotification);
+        knobsB[0]->setValue(audioCore.getDeckGain(1), juce::dontSendNotification);
+        
+        // Sync EQ (0=low, 1=mid, 2=high)
+        knobsA[1]->setValue(audioCore.getDeckEQ(0, 2), juce::dontSendNotification); // High
+        knobsA[2]->setValue(audioCore.getDeckEQ(0, 1), juce::dontSendNotification); // Mid
+        knobsA[3]->setValue(audioCore.getDeckEQ(0, 0), juce::dontSendNotification); // Low
+        
+        knobsB[1]->setValue(audioCore.getDeckEQ(1, 2), juce::dontSendNotification);
+        knobsB[2]->setValue(audioCore.getDeckEQ(1, 1), juce::dontSendNotification);
+        knobsB[3]->setValue(audioCore.getDeckEQ(1, 0), juce::dontSendNotification);
+        
+        // Sync Volume
+        faderA.setValue(audioCore.getDeckVolume(0), juce::dontSendNotification);
+        faderB.setValue(audioCore.getDeckVolume(1), juce::dontSendNotification);
+        
+        // Sync Crossfader
+        crossfader.setValue(audioCore.getCrossfaderPosition(), juce::dontSendNotification);
     }
 
     ~MixerCenterSection() override { setLookAndFeel(nullptr); }

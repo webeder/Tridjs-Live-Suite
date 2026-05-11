@@ -50,7 +50,13 @@ FetchContent_Declare(
     URL https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
 )
 
-FetchContent_MakeAvailable(onnxruntime sqlite3_source)
+# Fetch Duktape (JavaScript Engine)
+FetchContent_Declare(
+    duktape
+    URL https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz
+)
+
+FetchContent_MakeAvailable(onnxruntime sqlite3_source duktape)
 
 # Create a static library for SQLite3
 add_library(sqlite3 STATIC "${sqlite3_source_SOURCE_DIR}/sqlite3.c")
@@ -134,6 +140,7 @@ target_sources(TridjsLiveSuite
         Source/TrackBrowserComponent.h
         Source/DriveManager.cpp
         Source/DriveManager.h
+        "${duktape_SOURCE_DIR}/src/duktape.c"
 )
 
 # Adicionando Include Directories das dependencias extraídas 
@@ -142,6 +149,7 @@ target_include_directories(TridjsLiveSuite PRIVATE
     ${soundtouch_SOURCE_DIR}/include
     ${onnxruntime_SOURCE_DIR}/include
     ${sqlite3_source_SOURCE_DIR}
+    ${duktape_SOURCE_DIR}/src
 )
 
 # Compile options & modules
@@ -189,4 +197,6 @@ add_custom_command(TARGET TridjsLiveSuite POST_BUILD
 
 # Adicionar fontes do STK diretamente se necessário ou via target
 target_compile_definitions(TridjsLiveSuite PRIVATE __WINDOWS_ASIO__ __WINDOWS_DS__)
+
+set_target_properties(TridjsLiveSuite PROPERTIES WIN32_EXECUTABLE TRUE)
 

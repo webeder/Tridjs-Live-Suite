@@ -1,4 +1,4 @@
-#include "MainComponent.h"
+﻿#include "MainComponent.h"
 #include "Controllers/ControllerSandboxWindow.h"
 
 MainComponent::MainComponent() 
@@ -31,9 +31,6 @@ MainComponent::MainComponent()
 
     setSize(1024, 768);
     loadAllSettings();
-
-    // Register inputManager as a global MIDI callback for the deviceManager
-    deviceManager.addMidiInputCallback({}, &inputManager);
 
   // Initialize Inputs
   inputManager.onNoteOn = [this](int note, float vel) {
@@ -86,9 +83,6 @@ MainComponent::MainComponent()
   inputManager.getSerialManager().onRawDataSent = [this](const juce::String& data) { handFreeComp->fxRack.appendSerialLog("TX: " + data); };
 
   inputManager.onMessageReceived = [this](const juce::MidiMessage& msg) {
-      // Debug log for incoming MIDI
-      juce::Logger::writeToLog("MIDI IN: " + juce::String::toHexString(msg.getRawData(), msg.getRawDataSize()));
-
       // 1. Convert raw MIDI to internal ControllerInputEvent using the Mixxx XML parser
       int status = msg.getRawData()[0];
       int midino = msg.getRawData()[1];
@@ -103,8 +97,7 @@ MainComponent::MainComponent()
       if (ctrl.is14BitMSB)
       {
           msbState[status][midino] = val7bit;
-          // Trigger coarse update immediately for responsiveness
-          ev.value = val7bit / 127.0f;
+          return;
       }
       else if (ctrl.is14BitLSB)
       {
@@ -116,11 +109,7 @@ MainComponent::MainComponent()
               ev.value = val14bit / 16383.0f;
               msbState[status].erase(msbMidino);
           }
-          else 
-          {
-              // LSB arrived without MSB, treat as fine adjustment of 0
-              ev.value = val7bit / 16383.0f; 
-          }
+          else return;
       }
       else
       {
@@ -129,16 +118,8 @@ MainComponent::MainComponent()
 
       // Map Deck Index
       int chNum = (status & 0x0F) + 1;
-      bool isMaster = ctrl.group.containsIgnoreCase("Master");
-      
       if (ctrl.group.startsWithIgnoreCase("[Channel"))
           chNum = ctrl.group.substring(8, ctrl.group.length() - 1).getIntValue();
-      else if (ctrl.group.containsIgnoreCase("[Channel")) {
-          // Handle complex groups like [EqualizerRack1_[Channel1]_Effect1]
-          int startIdx = ctrl.group.indexOfIgnoreCase("[Channel") + 8;
-          int endIdx = ctrl.group.indexOf(startIdx, "]");
-          if (endIdx > startIdx) chNum = ctrl.group.substring(startIdx, endIdx).getIntValue();
-      }
       
       // FLX10 Mapping: Deck 1/3 -> A, Deck 2/4 -> B
       int targetDeck = (chNum == 1 || chNum == 3) ? 0 : 1;
@@ -147,7 +128,6 @@ MainComponent::MainComponent()
       // Map Mixxx keys to our internal EventTypes
       if (ctrl.key == "play")            ev.type = ControllerEventType::Play;
       else if (ctrl.key == "cue_default") ev.type = ControllerEventType::Cue;
-      else if (isMaster && ctrl.key == "volume") ev.type = ControllerEventType::MasterVolume;
       else if (ctrl.key == "volume")      ev.type = ControllerEventType::Volume;
       else if (ctrl.key == "pregain")     ev.type = ControllerEventType::Gain;
       else if (ctrl.key == "rate")        ev.type = ControllerEventType::Pitch;
@@ -160,13 +140,6 @@ MainComponent::MainComponent()
       else if (ctrl.key == "loop_in")     ev.type = ControllerEventType::LoopIn;
       else if (ctrl.key == "loop_out")    ev.type = ControllerEventType::LoopOut;
       else if (ctrl.key == "reloop_toggle") ev.type = ControllerEventType::Reloop;
-      else if (ctrl.key == "loop_halve")  ev.type = ControllerEventType::LoopHalve;
-      else if (ctrl.key == "loop_double") ev.type = ControllerEventType::LoopDouble;
-      else if (ctrl.key == "cue_set")     ev.type = ControllerEventType::Cue; // Generic cue set
-      else if (ctrl.key.containsIgnoreCase("hotcue_")) {
-          ev.type = ControllerEventType::HotCue;
-          ev.parameter = ctrl.key.substring(7).getIntValue();
-      }
       else if (ctrl.key == "slip_enabled") ev.type = ControllerEventType::Slip;
       else if (ctrl.isScriptBinding && ctrl.key.containsIgnoreCase("jog"))
       {
@@ -176,21 +149,6 @@ MainComponent::MainComponent()
 
       if (ev.type != ControllerEventType::Unknown)
           controllerRouter.pushEvent(ev);
-
-      // 2. Handle Script Bindings (Mixxx JS compatible) - QUEUED to UI thread
-      if (ctrl.isScriptBinding && jsEngine)
-      {
-          ControllerInputEvent scriptEv;
-          scriptEv.type = ControllerEventType::ScriptCall;
-          scriptEv.value = (float)val7bit;
-          scriptEv.deckIndex = targetDeck;
-          
-          // Copy function name to fixed buffer
-          juce::String funcName = ctrl.key;
-          funcName.copyToUTF8(scriptEv.scriptKey, sizeof(scriptEv.scriptKey));
-          
-          controllerRouter.pushEvent(scriptEv);
-      }
   };
 
   loadFlx10Mapping();
@@ -404,7 +362,10 @@ MainComponent::MainComponent()
   };
 
   handFreeComp->stems.onStemMuteChanged = [this](int idx, bool muted) { audioEngine.setStemMuted(idx, muted); };
-
+  handFreeComp->fxRack.onMidiDeviceIndexChanged = [this](int idx) {
+      auto devices = juce::MidiInput::getAvailableDevices();
+      if (idx > 0 && (idx-1) < devices.size()) inputManager.setMidiInput(devices[idx-1]);
+  };
   handFreeComp->fxRack.onInputModeChanged = [this](int modeIdx) { 
       auto mode = static_cast<InputManager::InputMode>(modeIdx);
       inputManager.setInputMode(mode); 
@@ -479,7 +440,7 @@ void MainComponent::resized() {
 
 // MenuBarModel Implementation
 juce::StringArray MainComponent::getMenuBarNames() {
-    return { "Geral", "Controladores", "Layout", "Plugins", juce::String::fromUTF8("Ajuda") };
+    return { "Geral", "Layout", "Plugins", juce::String::fromUTF8("Ajuda") };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) {
@@ -491,10 +452,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addCommandItem(&commandManager, navLearn);
         menu.addCommandItem(&commandManager, navSerial);
         menu.addCommandItem(&commandManager, navConfig);
-    } else if (menuName == "Controladores") {
-        menu.addItem(300, "Gerenciar Mapeamentos...");
-        menu.addSeparator();
-        menu.addItem(301, "Recarregar Mapeamento Atual");
     } else if (menuName == "Layout") {
         menu.addItem(1, "DJ Hand Free", true, currentMode == LayoutMode::HandFree);
         menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
@@ -504,9 +461,9 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
         menu.addItem(200, juce::CharPointer_UTF8("\xf0\x9f\x8e\x9b\xef\xb8\x8f  Controller Sandbox (Dev)"));
     } else if (menuName == juce::String::fromUTF8("Ajuda")) {
         menu.addItem(10, juce::String::fromUTF8("Sobre"));
-        menu.addItem(11, juce::String::fromUTF8("Licença e Uso"));
+        menu.addItem(11, juce::String::fromUTF8("LicenÃ§a e Uso"));
         menu.addSeparator();
-        menu.addItem(20, juce::String::fromUTF8("❤️ Doar / Apoiar"));
+        menu.addItem(20, juce::String::fromUTF8("â¤ï¸ Doar / Apoiar"));
     }
     return menu;
 }
@@ -514,8 +471,6 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
 void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
     if (menuItemID == 1) setLayoutMode(0);
     else if (menuItemID == 2) setLayoutMode(1);
-    else if (menuItemID == 300) showControllerManager();
-    else if (menuItemID == 301) loadFlx10Mapping();
     else if (menuItemID == 10) showAboutWindow();
     else if (menuItemID == 11) showLicenseWindow();
     else if (menuItemID == 20) showDonateWindow();
@@ -569,7 +524,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress('m', juce::ModifierKeys::commandModifier);
         break;
     case navConfig:
-        result.setInfo("Config", "Navegar para aba de Configurações", "Navigation", 0);
+        result.setInfo("Config", "Navegar para aba de ConfiguraÃ§Ãµes", "Navigation", 0);
         result.addDefaultKeypress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
         break;
     default:
@@ -631,9 +586,9 @@ void MainComponent::showAboutWindow() {
     juce::Image icon = juce::ImageCache::getFromFile(iconFile);
     
     juce::String msg = juce::String::fromUTF8("Tridjs Live Suite\n\n"
-                      "Versão: Beta 1.0\n"
+                      "VersÃ£o: Beta 1.0\n"
                       "Autor: DJ Exder (Coletivo TriDJS)\n"
-                      "Segurança da Informação: DJ Christian Mauro");
+                      "SeguranÃ§a da InformaÃ§Ã£o: DJ Christian Mauro");
 
     // AlertWindow instance to allow custom components (like the icon at the top)
     auto* aw = new juce::AlertWindow(juce::String::fromUTF8("Sobre"), "", juce::MessageBoxIconType::NoIcon);
@@ -662,14 +617,14 @@ void MainComponent::showAboutWindow() {
 
 void MainComponent::showLicenseWindow() {
     juce::String msg = juce::String::fromUTF8("Uso: Software gratuito para uso pessoal e profissional.\n\n"
-                      "Proibição: É estritamente proibida a venda deste software.\n\n"
-                      "Modificações (GitHub): Em caso de modificação do código-fonte disponível no GitHub, "
-                      "é obrigatório manter e dar os devidos créditos ao desenvolvedor original (DJ Exder) "
+                      "ProibiÃ§Ã£o: Ã‰ estritamente proibida a venda deste software.\n\n"
+                      "ModificaÃ§Ãµes (GitHub): Em caso de modificaÃ§Ã£o do cÃ³digo-fonte disponÃ­vel no GitHub, "
+                      "Ã© obrigatÃ³rio manter e dar os devidos crÃ©ditos ao desenvolvedor original (DJ Exder) "
                       "e ao Coletivo TriDJS.\n\n"
                       "Direitos: Direitos reservados ao Coletivo TriDJS (Marca Registrada).");
 
     auto opts = juce::MessageBoxOptions()
-        .withTitle(juce::String::fromUTF8("Licença e Uso"))
+        .withTitle(juce::String::fromUTF8("LicenÃ§a e Uso"))
         .withMessage(msg)
         .withButton("OK")
         .withButton("Visitar Site");
@@ -682,23 +637,23 @@ void MainComponent::showLicenseWindow() {
 }
 
 void MainComponent::showDonateWindow() {
-    juce::String msg = juce::String::fromUTF8("\"Fortaleça a Revolução DJ Hand Free!\"\n\n"
-                      "O Tridjs Live Suite nasceu com a missão de quebrar as barreiras entre o artista e a tecnologia. "
-                      "Nosso objetivo é fomentar a cultura da música eletrônica, oferecendo ferramentas autorais que "
-                      "permitem uma performance única e expressiva.\n\n"
-                      "Ao apoiar este projeto, você ajuda o Coletivo TriDJs a manter o software gratuito para todos, "
+    juce::String msg = juce::String::fromUTF8("\"FortaleÃ§a a RevoluÃ§Ã£o DJ Hand Free!\"\n\n"
+                      "O Tridjs Live Suite nasceu com a missÃ£o de quebrar as barreiras entre o artista e a tecnologia. "
+                      "Nosso objetivo Ã© fomentar a cultura da mÃºsica eletrÃ´nica, oferecendo ferramentas autorais que "
+                      "permitem uma performance Ãºnica e expressiva.\n\n"
+                      "Ao apoiar este projeto, vocÃª ajuda o Coletivo TriDJs a manter o software gratuito para todos, "
                       "a investir em novos sensores para a tecnologia de gestos e a fortalecer a cena musical no Brasil e no mundo.\n\n"
-                      "Sua doação é um investimento na liberdade criativa.\n\n"
-                      "AVISO DE SEGURANÇA: Por segurança, todas as contribuições são processadas exclusivamente através do nosso site oficial.");
+                      "Sua doaÃ§Ã£o Ã© um investimento na liberdade criativa.\n\n"
+                      "AVISO DE SEGURANÃ‡A: Por seguranÃ§a, todas as contribuiÃ§Ãµes sÃ£o processadas exclusivamente atravÃ©s do nosso site oficial.");
 
     auto opts = juce::MessageBoxOptions()
         .withTitle(juce::String::fromUTF8("Apoie o Movimento TriDJS"))
         .withMessage(msg)
         .withButton("Talvez Depois")
-        .withButton(juce::String::fromUTF8("Fazer parte dessa história (Site Seguro)"));
+        .withButton(juce::String::fromUTF8("Fazer parte dessa histÃ³ria (Site Seguro)"));
 
     juce::AlertWindow::showAsync(opts, [](int result) {
-        if (result == 2) { // Second button (Fazer parte desta história)
+        if (result == 2) { // Second button (Fazer parte desta histÃ³ria)
             juce::URL("https://www.tridjs.com.br/doar").launchInDefaultBrowser();
         }
     });
@@ -987,7 +942,7 @@ void MainComponent::incrementPitch(float delta) {
 void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile) {
     if (!tempFile.existsAsFile()) return;
 
-    auto* aw = new juce::AlertWindow("Finalizar Gravação", "Digite o nome para a gravação da Master:", juce::MessageBoxIconType::NoIcon);
+    auto* aw = new juce::AlertWindow("Finalizar GravaÃ§Ã£o", "Digite o nome para a gravaÃ§Ã£o da Master:", juce::MessageBoxIconType::NoIcon);
     aw->addTextEditor("nameInput", "", "Nome do arquivo...");
     aw->addButton("Salvar", 1, juce::KeyPress(juce::KeyPress::returnKey));
     aw->addButton("Cancelar", 0, juce::KeyPress(juce::KeyPress::escapeKey));
@@ -1003,17 +958,17 @@ void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile
             
             if (!fileName.endsWithIgnoreCase(".wav")) fileName += ".wav";
 
-            // Pasta base especificada pelo usuário (%USERPROFILE%\Music\tridjs_lifeStudio\Recordings)
+            // Pasta base especificada pelo usuÃ¡rio (%USERPROFILE%\Music\tridjs_lifeStudio\Recordings)
             juce::File targetDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                     .getChildFile("tridjs_lifeStudio")
                                     .getChildFile("Recordings");
             
-            // Pasta dinâmica por data
+            // Pasta dinÃ¢mica por data
             juce::File dateFolder = targetDir.getChildFile(now.formatted("%Y-%m-%d"));
             
             if (!dateFolder.exists()) {
                 if (!dateFolder.createDirectory()) {
-                    // Fallback para pasta padrão de músicas se não houver permissão no caminho fixo
+                    // Fallback para pasta padrÃ£o de mÃºsicas se nÃ£o houver permissÃ£o no caminho fixo
                     dateFolder = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                     .getChildFile("Tridjs_Recordings")
                                     .getChildFile(now.formatted("%Y-%m-%d"));
@@ -1030,10 +985,10 @@ void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile
 
             if (!tempFile.moveFileTo(targetFile)) {
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, 
-                    "Erro ao Salvar", "Não foi possível mover o arquivo para a pasta de destino.");
+                    "Erro ao Salvar", "NÃ£o foi possÃ­vel mover o arquivo para a pasta de destino.");
             }
         } else {
-            // Cancelado: Deletar arquivo temporário fisicamente
+            // Cancelado: Deletar arquivo temporÃ¡rio fisicamente
             if (tempFile.existsAsFile())
                 tempFile.deleteFile();
         }
@@ -1041,21 +996,15 @@ void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile
     }));
 }
 
-void MainComponent::showControllerManager()
+void MainComponent::loadFlx10Mapping()
 {
-    if (!controllerManagerWindow)
-    {
-        controllerManagerWindow = std::make_unique<ControllerManagerWindow>(
-            persistence.getMappingsFolder(),
-            [this](const juce::File& f) { loadControllerMapping(f); }
-        );
-    }
-    controllerManagerWindow->setVisible(true);
-    controllerManagerWindow->toFront(true);
-}
+    auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+    auto mappingFile = appDir.getChildFile("Source").getChildFile("Controllers").getChildFile("Mappings").getChildFile("FLX10").getChildFile("Pioneer-DDJ-FLX10.midi.xml");
+    
+    // Fallback for development
+    if (!mappingFile.existsAsFile())
+        mappingFile = appDir.getParentDirectory().getChildFile("Source").getChildFile("Controllers").getChildFile("Mappings").getChildFile("FLX10").getChildFile("Pioneer-DDJ-FLX10.midi.xml");
 
-void MainComponent::loadControllerMapping(const juce::File& mappingFile)
-{
     if (mappingFile.existsAsFile())
     {
         mixxxParser.loadXml(mappingFile);
@@ -1066,39 +1015,8 @@ void MainComponent::loadControllerMapping(const juce::File& mappingFile)
             jsFile = mappingFile.getParentDirectory().getChildFile(mappingFile.getFileNameWithoutExtension() + "-script.js");
             
         if (jsFile.existsAsFile() && jsEngine)
-        {
             jsEngine->executeScript(jsFile.loadFileAsString());
-            
-            // Try to call init function (Mixxx standard)
-            // The function name is usually Prefix.init where Prefix is defined in XML
-            // For FLX10 it's likely DDJFLX10.init
-            jsEngine->callFunction("DDJFLX10.init", 0, "none", "none");
-            jsEngine->callFunction("init", 0, "none", "none"); // Fallback
-        }
-        
-        juce::Logger::writeToLog("Controller Mapping Loaded: " + mappingFile.getFileName() + " (" + juce::String(mixxxParser.getMappingCount()) + " controls)");
     }
-    else
-    {
-        juce::Logger::writeToLog("Controller Mapping NOT FOUND: " + mappingFile.getFullPathName());
-    }
-}
-
-void MainComponent::loadFlx10Mapping()
-{
-    auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    
-    // First try the user documents folder
-    auto mappingFile = persistence.getMappingsFolder().getChildFile("Pioneer-DDJ-FLX10.midi.xml");
-    
-    // Fallback to internal resources
-    if (!mappingFile.existsAsFile())
-        mappingFile = appDir.getParentDirectory().getChildFile("Source").getChildFile("Controllers").getChildFile("Mappings").getChildFile("FLX10").getChildFile("Pioneer-DDJ-FLX10.midi.xml");
-
-    if (!mappingFile.existsAsFile())
-        mappingFile = juce::File("C:\\tridjs\\Tridjs-Live-Suite-main\\Source\\Controllers\\Mappings\\FLX10\\Pioneer-DDJ-FLX10.midi.xml");
-
-    loadControllerMapping(mappingFile);
 }
 
 void MainComponent::processControllerEvents()
@@ -1110,23 +1028,16 @@ void MainComponent::processControllerEvents()
         {
             case ControllerEventType::Play:
                 if (ev.value > 0.5f) {
-                    if (audioEngine.isDeckPlaying(ev.deckIndex)) {
-                        if (ev.deckIndex == 0) audioEngine.stopDeckA();
-                        else if (ev.deckIndex == 1) audioEngine.stopDeckB();
-                    } else {
-                        if (ev.deckIndex == 0) audioEngine.playDeckA();
-                        else if (ev.deckIndex == 1) audioEngine.playDeckB();
-                    }
+                    if (ev.deckIndex == 0) audioEngine.playDeckA();
+                    else audioEngine.playDeckB();
+                } else {
+                    if (ev.deckIndex == 0) audioEngine.stopDeckA();
+                    else audioEngine.stopDeckB();
                 }
                 break;
 
             case ControllerEventType::Cue:
-                if (ev.value > 0.5f) {
-                    audioEngine.triggerDeckCue(ev.deckIndex);
-                } else {
-                    if (ev.deckIndex == 0) audioEngine.stopDeckA();
-                    else if (ev.deckIndex == 1) audioEngine.stopDeckB();
-                }
+                if (ev.value > 0.5f) audioEngine.triggerDeckCue(ev.deckIndex);
                 break;
 
             case ControllerEventType::Volume:
@@ -1154,17 +1065,11 @@ void MainComponent::processControllerEvents()
                 break;
 
             case ControllerEventType::Pitch:
-                // FLX10 pitch fader is inverted: 0 = top (+6%), 16383 = bottom (-6%)
-                // So we invert: pitch = 1.0 - normalized, then remap to [-1, +1]
-                audioEngine.setDeckPitch(ev.deckIndex, (1.0f - ev.value) * 2.0f - 1.0f);
+                audioEngine.setDeckPitch(ev.deckIndex, (ev.value * 2.0f) - 1.0f);
                 break;
 
             case ControllerEventType::Crossfader:
                 audioEngine.setCrossfaderPosition(ev.value);
-                break;
-
-            case ControllerEventType::MasterVolume:
-                audioEngine.setMasterVolume(ev.value);
                 break;
 
             case ControllerEventType::Sync:
@@ -1176,67 +1081,11 @@ void MainComponent::processControllerEvents()
                 break;
 
             case ControllerEventType::JogScratch:
-                // ev.value is already the signed delta from scratchTick (e.g. -3 to +3)
-                // Scale down for smooth feel: each tick = small pitch shift
-                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.5f);
+                audioEngine.applyJogDelta(ev.deckIndex, ev.value);
                 break;
 
             case ControllerEventType::JogBend:
-                // Nudge mode: small pitch adjustment, not scratch
-                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.1f);
-                break;
-
-            case ControllerEventType::LoopIn:
-                if (ev.value > 0.5f) {
-                    audioEngine.setDeckCuePoint(ev.deckIndex, audioEngine.getDeckPosition(ev.deckIndex));
-                    // Start of loop range
-                    audioEngine.setDeckLoopRange(ev.deckIndex, audioEngine.getDeckPosition(ev.deckIndex), audioEngine.getDeckLoopLength(ev.deckIndex));
-                }
-                break;
-
-            case ControllerEventType::LoopOut:
-                if (ev.value > 0.5f) {
-                    double start = audioEngine.getDeckLoopStart(ev.deckIndex);
-                    double current = audioEngine.getDeckPosition(ev.deckIndex);
-                    if (current > start) {
-                        audioEngine.setDeckLoopRange(ev.deckIndex, start, current - start);
-                        audioEngine.setDeckLoopEnabled(ev.deckIndex, true);
-                    }
-                }
-                break;
-
-            case ControllerEventType::Reloop:
-                if (ev.value > 0.5f) {
-                    audioEngine.setDeckLoopEnabled(ev.deckIndex, !audioEngine.isDeckLoopEnabled(ev.deckIndex));
-                }
-                break;
-
-            case ControllerEventType::LoopHalve: // Triggered by physical IN button
-                if (ev.value > 0.5f && audioEngine.isDeckLoopEnabled(ev.deckIndex)) {
-                    double start = audioEngine.getDeckLoopStart(ev.deckIndex);
-                    double len = audioEngine.getDeckLoopLength(ev.deckIndex);
-                    double newLen = len * 0.5;
-                    if (newLen > 0.01) // Minimum ~10ms
-                        audioEngine.setDeckLoopRange(ev.deckIndex, start, newLen);
-                }
-                break;
-
-            case ControllerEventType::LoopDouble: // Triggered by physical OUT button
-                if (ev.value > 0.5f && audioEngine.isDeckLoopEnabled(ev.deckIndex)) {
-                    double start = audioEngine.getDeckLoopStart(ev.deckIndex);
-                    double len = audioEngine.getDeckLoopLength(ev.deckIndex);
-                    audioEngine.setDeckLoopRange(ev.deckIndex, start, len * 2.0);
-                }
-                break;
-
-            case ControllerEventType::ScriptCall:
-                if (jsEngine)
-                {
-                    // For script calls from router, we use the stored key
-                    juce::String funcName = juce::String::fromUTF8(ev.scriptKey);
-                    juce::String group = "[Channel" + juce::String(ev.deckIndex + 1) + "]";
-                    jsEngine->callFunction(funcName, ev.value, group, funcName);
-                }
+                audioEngine.applyJogDelta(ev.deckIndex, ev.value);
                 break;
 
             default:

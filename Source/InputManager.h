@@ -23,7 +23,6 @@ public:
     void setLearning(bool learning) { isLearning = learning; }
 
     // MIDI Methods
-    void setMidiInput(const juce::MidiDeviceInfo& device);
     juce::String getCurrentMidiDeviceName() const;
 
     // Serial Methods
@@ -37,6 +36,7 @@ public:
     std::function<void(int note, float velocity)> onNoteOn;
     std::function<void(int note)> onNoteOff;
     std::function<void(int controller, float value)> onCC;
+    std::function<void(const juce::MidiMessage& message)> onMessageReceived;
     std::function<void(const juce::String& status)> onStatusMessage;
     std::function<void(const juce::String& rawData)> onRawDataReceived;
 
@@ -49,7 +49,6 @@ private:
 
     InputMode currentMode = InputMode::MIDI;
     bool isLearning = false;
-    std::unique_ptr<juce::MidiInput> midiInput;
     SerialManager serialManager;
     
     // MIDI Stream Parsing

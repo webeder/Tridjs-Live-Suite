@@ -31,6 +31,16 @@ enum class ControllerEventType
     JogScratch,
     JogBend,
     HotCue,
+    Gain,
+    LoopIn,
+    LoopOut,
+    Reloop,
+    Slip,
+    ScratchMode,
+    ScriptCall,
+    MasterVolume,
+    LoopHalve,
+    LoopDouble,
     Unknown
 };
 
@@ -40,6 +50,7 @@ struct ControllerInputEvent
     int deckIndex = 0;   // 0 for Deck A, 1 for Deck B, etc.
     float value = 0.0f;  // Normalized 0.0 to 1.0 or specific delta
     int parameter = 0;   // E.g., HotCue index
+    char scriptKey[64] = {0}; // Fixed size string for script callbacks
 };
 
 struct ControllerOutputEvent

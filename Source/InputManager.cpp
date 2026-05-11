@@ -24,8 +24,6 @@ InputManager::InputManager()
 
 InputManager::~InputManager()
 {
-    if (midiInput) midiInput->stop();
-    midiInput.reset();
 }
 
 void InputManager::setInputMode(InputMode mode)
@@ -35,18 +33,9 @@ void InputManager::setInputMode(InputMode mode)
         onStatusMessage("Modo de entrada: " + juce::String(mode == InputMode::MIDI ? "MIDI" : "SERIAL"));
 }
 
-void InputManager::setMidiInput(const juce::MidiDeviceInfo& device)
-{
-    if (midiInput) midiInput->stop();
-    midiInput.reset();
-
-    midiInput = juce::MidiInput::openDevice(device.identifier, this);
-    if (midiInput) midiInput->start();
-}
-
 juce::String InputManager::getCurrentMidiDeviceName() const
 {
-    return midiInput ? midiInput->getName() : "None";
+    return "Global";
 }
 
 bool InputManager::openSerialPort(const juce::String& portName, int baudRate)
@@ -63,6 +52,8 @@ void InputManager::handleIncomingMidiMessage(juce::MidiInput* source, const juce
 {
     if (source != nullptr && currentMode != InputMode::MIDI && !isLearning) return;
     if (source == nullptr && currentMode != InputMode::SERIAL && !isLearning) return;
+
+    if (onMessageReceived) onMessageReceived(message);
 
     if (message.isNoteOn())
     {

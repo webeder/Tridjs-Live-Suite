@@ -117,6 +117,7 @@ public:
     float getMasterVolume() const { return masterVolume; }
     float getTrackVolume() const { return trackVolume; }
     void setCrossfaderPosition (float pos);
+    float getCrossfaderPosition() const { return crossfaderPos; }
     
     // Per-Deck Gain/EQ
     void setDeckGain (int deckIdx, float gain);
@@ -185,6 +186,10 @@ public:
     }
     void triggerDeckCue (int deckIdx);
     void handleSyncLogic();
+
+    // Jog / Scratch Support
+    void setDeckScratching (int deckIdx, bool scratching);
+    void applyJogDelta (int deckIdx, float delta); // delta is usually -1.0 to 1.0 (relative movement)
     
     VocalVstChain& getVocalVstChain() { return vocalVstChain; }
     PluginScannerManager& getVstManager() { return vstManager; }
@@ -213,6 +218,9 @@ private:
     juce::AudioThumbnail thumbnail { 512, formatManager, thumbnailCache };
     juce::AudioThumbnail thumbnailB { 512, formatManager, thumbnailCache };
     juce::AudioThumbnail thumbnailH { 512, formatManager, thumbnailCache };
+
+    std::atomic<bool> isScratching[3] = { false, false, false };
+    float jogBend[3] = { 0.0f, 0.0f, 0.0f };
 
     double deckAPitch = 0.0, deckBPitch = 0.0, deckHPitch = 0.0; // -1.0 to 1.0 (maps to -6% to +6%)
     float masterVolume = 1.0f;
@@ -410,6 +418,7 @@ private:
     RecorderState masterRecorder;
 
     void updateEQFilters(int deckIdx);
+    void updateDeckSpeed(int deckIdx);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioCore)
 };

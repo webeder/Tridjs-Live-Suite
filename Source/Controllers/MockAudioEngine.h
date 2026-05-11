@@ -62,6 +62,26 @@ public:
             case ControllerEventType::Pitch:
                 msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> PITCH = " + juce::String(event.value, 3);
                 break;
+            
+            case ControllerEventType::Gain:
+                msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> GAIN = " + juce::String(event.value, 3);
+                break;
+            
+            case ControllerEventType::LoopIn:
+                msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> LOOP IN";
+                break;
+            
+            case ControllerEventType::LoopOut:
+                msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> LOOP OUT";
+                break;
+            
+            case ControllerEventType::Reloop:
+                msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> RELOOP/EXIT";
+                break;
+            
+            case ControllerEventType::Slip:
+                msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> SLIP (" + juce::String(event.value > 0.5f ? "ON" : "OFF") + ")";
+                break;
 
             case ControllerEventType::JogScratch:
                 msg = "[MOCK] Deck " + deckName(event.deckIndex) + " -> JOG SCRATCH delta=" + juce::String(event.value, 3);

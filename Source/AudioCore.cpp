@@ -750,6 +750,39 @@ void AudioCore::setMainTrackLoopEnabled(bool enabled) {
         handsFreeChannel->readerSource->setLooping(enabled);
 }
 
+void AudioCore::setDeckScratching (int deckIdx, bool scratching)
+{
+    if (deckIdx >= 0 && deckIdx < 3)
+    {
+        isScratching[deckIdx] = scratching;
+        if (!scratching) jogBend[deckIdx] = 0.0f;
+    }
+}
+
+void AudioCore::applyJogDelta (int deckIdx, float delta)
+{
+    if (deckIdx < 0 || deckIdx >= 3) return;
+
+    auto* transport = (deckIdx == 0) ? deckAChannel->transport.get() : 
+                     (deckIdx == 1 ? deckBChannel->transport.get() : handsFreeChannel->transport.get());
+    
+    if (transport == nullptr) return;
+
+    if (isScratching[deckIdx])
+    {
+        // Direct seek for scratching
+        double currentPos = transport->getCurrentPosition();
+        double newPos = currentPos + (delta * 0.1); // Sensitivity factor
+        transport->setPosition(std::max(0.0, std::min(transport->getLengthInSeconds(), newPos)));
+    }
+    else
+    {
+        // Pitch bend
+        jogBend[deckIdx] = delta * 0.05f; // Small pitch nudge
+        updateDeckSpeed(deckIdx);
+    }
+}
+
 bool AudioCore::isMainTrackLoopEnabled() const {
     if (handsFreeChannel && handsFreeChannel->readerSource)
         return handsFreeChannel->readerSource->isLooping();
@@ -904,7 +937,15 @@ void AudioCore::setDeckPitch(int deckIdx, double pitch) {
     else if (deckIdx == 1) deckBPitch = pitch;
     else if (deckIdx == 2) deckHPitch = pitch;
 
-    double speed = 1.0 + (pitch * 0.06);
+    updateDeckSpeed(deckIdx);
+}
+
+void AudioCore::updateDeckSpeed(int deckIdx)
+{
+    double pitch = (deckIdx == 0) ? deckAPitch : (deckIdx == 1 ? deckBPitch : deckHPitch);
+    double bend = (deckIdx >= 0 && deckIdx < 3) ? jogBend[deckIdx] : 0.0;
+    
+    double speed = (1.0 + (pitch * 0.06)) + bend;
     
     PlaybackChannel* channel = nullptr;
     if (deckIdx == 0) channel = deckAChannel.get();
@@ -913,9 +954,6 @@ void AudioCore::setDeckPitch(int deckIdx, double pitch) {
 
     if (channel && channel->resampler)
         channel->resampler->setResamplingRatio(speed); 
-
-    // If it's the global pitch (deck 2), also update all pads
-    // (Note: Raw memory pads currently play at 1.0x speed. Resampling can be added later if needed)
 }
 
 double AudioCore::getDeckPitch(int deckIdx) const {
