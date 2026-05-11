@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "AudioCore.h"
 #include "TrackBrowserComponent.h"
+#include "VstControlWidget.h"
 
 // --- Helper Components ---
 
@@ -12,25 +13,21 @@ class SimpleWaveform : public juce::Component,
 public:
     SimpleWaveform(AudioCore& ac, int idx) : audioCore(ac), deckIdx(idx) {
         audioCore.getThumbnail(deckIdx).addChangeListener(this);
-        setBufferedToImage(true);
-        startTimer(16); // ~60 FPS
-        
         addAndMakeVisible(zoomInBtn);
         addAndMakeVisible(zoomOutBtn);
-        
-        zoomInBtn.setButtonText("+");
-        zoomOutBtn.setButtonText("-");
+        zoomInBtn.setButtonText("+"); zoomOutBtn.setButtonText("-");
+        zoomInBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.7); repaint(); };
+        zoomOutBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.4); repaint(); };
         
         auto setupZoomBtn = [](juce::TextButton& b) {
             b.setColour(juce::TextButton::buttonColourId, juce::Colours::black.withAlpha(0.6f));
             b.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-            b.setConnectedEdges(juce::Button::ConnectedOnBottom | juce::Button::ConnectedOnTop);
         };
         setupZoomBtn(zoomInBtn);
         setupZoomBtn(zoomOutBtn);
         
-        zoomInBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.8); repaint(); };
-        zoomOutBtn.onClick = [this] { zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.25); repaint(); };
+        setOpaque(true);
+        startTimer(16); // ~60 FPS
     }
     ~SimpleWaveform() override { audioCore.getThumbnail(deckIdx).removeChangeListener(this); }
     
@@ -51,15 +48,10 @@ public:
         if (totalLen > 0.0) {
             double pos = audioCore.getDeckPosition(deckIdx);
             double visibleSeconds = zoomLevel;
-            float centerWeight = 0.5f;
-            double startTime = pos - (visibleSeconds * centerWeight);
-            
+            double startTime = pos - (visibleSeconds * 0.5);
             double clickTime = startTime + ((double)e.x / getWidth()) * visibleSeconds;
             if (deckIdx == 0) audioCore.seekDeckA(clickTime);
-            else if (deckIdx == 1) audioCore.seekDeckB(clickTime);
-            else audioCore.seekHandsFreeDeck(clickTime);
-            
-            // Update lastMouseX to current so drag starts from here
+            else audioCore.seekDeckB(clickTime);
             lastMouseX = e.x;
         }
     }
@@ -68,28 +60,17 @@ public:
         if (isDragging) {
             int deltaX = e.x - lastMouseX;
             lastMouseX = e.x;
-            
-            double visibleSeconds = zoomLevel; // Use dynamic zoom level
-            double secondsPerPixel = visibleSeconds / (double)getWidth();
-            double deltaSeconds = (double)deltaX * secondsPerPixel;
-            
+            double secondsPerPixel = zoomLevel / (double)getWidth();
             double currentPos = audioCore.getDeckPosition(deckIdx);
-            double newPos = juce::jlimit(0.0, audioCore.getDeckLength(deckIdx), currentPos - deltaSeconds);
-            
+            double newPos = juce::jlimit(0.0, audioCore.getDeckLength(deckIdx), currentPos - (deltaX * secondsPerPixel));
             if (deckIdx == 0) audioCore.seekDeckA(newPos);
             else audioCore.seekDeckB(newPos);
-            
-            if (!audioCore.isDeckPlaying(deckIdx)) {
-                audioCore.setDeckCuePoint(deckIdx, newPos);
-            }
+            if (!audioCore.isDeckPlaying(deckIdx)) audioCore.setDeckCuePoint(deckIdx, newPos);
             repaint();
         }
     }
 
-    void mouseUp(const juce::MouseEvent&) override {
-        isDragging = false;
-    }
-
+    void mouseUp(const juce::MouseEvent&) override { isDragging = false; }
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override {
         if (wheel.deltaY > 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 0.9);
         else if (wheel.deltaY < 0) zoomLevel = juce::jlimit(1.0, 32.0, zoomLevel * 1.1);
@@ -98,91 +79,83 @@ public:
     
     void paint(juce::Graphics& g) override {
         auto area = getLocalBounds();
-        g.setColour(juce::Colour(0xff0a0a0a));
-        g.fillRoundedRectangle(area.toFloat(), 4.0f);
+        g.fillAll(juce::Colour(0xff000000)); // Absolute black clear
 
         auto& thumb = audioCore.getThumbnail(deckIdx);
         double totalLen = audioCore.getDeckLength(deckIdx);
+        double thumbLen = thumb.getTotalLength();
         double pos      = audioCore.getDeckPosition(deckIdx);
 
-        if (totalLen > 0.0) {
+        if (totalLen > 0.0 && thumbLen > 0.0) {
             double visibleSeconds = zoomLevel;
-            // Original formula — allows negative startTime so the playhead
-            // stays perfectly centred and JUCE AudioThumbnail draws empty
-            // space for t < 0 (near track start). DO NOT clamp to 0.
             double startTime = pos - visibleSeconds * 0.5;
             double endTime   = startTime + visibleSeconds;
 
-            // Helper: time → pixel X (same origin as startTime)
             auto tx = [&](double t) -> float {
                 return (float)((t - startTime) / visibleSeconds) * (float)area.getWidth();
             };
 
-            // ── 1. Beat / Bar / Phrase Grid ──────────────────────────────────
+            // ── 1. Precise Beat Grid & Blocks ──────────────────────────────────
             double bpm = audioCore.getDeckBpm(deckIdx);
             if (bpm > 0.0) {
                 double beat = 60.0 / bpm;
                 double firstBeat = std::floor(startTime / beat) * beat;
+                juce::Colour deckCol = (deckIdx == 0 ? juce::Colours::cyan : juce::Colours::tomato);
+
                 for (double t = firstBeat; t <= endTime; t += beat) {
                     float gx = tx(t);
-                    if (gx < 0 || gx > area.getWidth()) continue;
+                    if (gx < -5.0f || gx > (float)area.getWidth() + 5.0f) continue;
+                    
                     int bn = (int)std::round(t / beat);
-                    if (bn % 16 == 0) {
-                        // Phrase line — bright cyan, 2 px wide
-                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.55f));
-                        g.fillRect(gx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
-                    } else if (bn % 4 == 0) {
-                        // Bar line — medium cyan
-                        g.setColour(juce::Colour(0xff00e5ff).withAlpha(0.28f));
-                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                    bool isBar = (bn % 4 == 0);
+                    bool isPhrase = (bn % 16 == 0);
+
+                    // Beat Indicators (Top Blocks)
+                    if (isPhrase) {
+                        g.setColour(juce::Colours::white);
+                        g.fillRect(gx - 2.0f, 0.0f, 4.0f, 10.0f);
+                    } else if (isBar) {
+                        g.setColour(deckCol.brighter(0.5f));
+                        g.fillRect(gx - 1.5f, 0.0f, 3.0f, 7.0f);
                     } else {
-                        // Beat line — subtle white
-                        g.setColour(juce::Colours::white.withAlpha(0.08f));
-                        g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
+                        g.setColour(deckCol.withAlpha(0.4f));
+                        g.fillRect(gx - 1.0f, 0.0f, 2.0f, 4.0f);
                     }
+
+                    // Background Vertical Lines
+                    g.setColour(isBar ? deckCol.withAlpha(0.12f) : juce::Colours::white.withAlpha(0.04f));
+                    g.drawVerticalLine((int)gx, 0.0f, (float)area.getHeight());
                 }
             }
 
             // ── 2. Waveform ───────────────────────────────────────────────────
-            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.7f)
-                                     : juce::Colours::tomato.withAlpha(0.7f));
+            g.setColour(deckIdx == 0 ? juce::Colours::cyan.withAlpha(0.8f) : juce::Colours::tomato.withAlpha(0.8f));
             thumb.drawChannels(g, area.reduced(0, 5), startTime, endTime, 1.0f);
 
             // ── 3. Loop Region ────────────────────────────────────────────────
             if (audioCore.isDeckLoopEnabled(deckIdx)) {
-                double loopStart = audioCore.getDeckLoopStart(deckIdx);
-                double loopEnd   = loopStart + audioCore.getDeckLoopLength(deckIdx);
-                if (loopEnd > startTime && loopStart < endTime) {
-                    float lx = tx(std::max(loopStart, startTime));
-                    float rx = tx(std::min(loopEnd,   endTime));
-                    // Tinted fill
-                    g.setColour(juce::Colours::yellow.withAlpha(0.22f));
+                double lStart = audioCore.getDeckLoopStart(deckIdx);
+                double lEnd   = lStart + audioCore.getDeckLoopLength(deckIdx);
+                if (lEnd > startTime && lStart < endTime) {
+                    float lx = tx(std::max(lStart, startTime));
+                    float rx = tx(std::min(lEnd, endTime));
+                    g.setColour(juce::Colours::yellow.withAlpha(0.25f));
                     g.fillRect(lx, 0.0f, rx - lx, (float)area.getHeight());
-                    // Bracket vertical lines
-                    g.setColour(juce::Colours::yellow.withAlpha(0.80f));
-                    g.fillRect(lx,        0.0f, 2.0f, (float)area.getHeight());
-                    g.fillRect(rx - 2.0f, 0.0f, 2.0f, (float)area.getHeight());
-                    // Bracket corners (top & bottom)
-                    g.fillRect(lx,         0.0f,                          10.0f, 3.0f);
-                    g.fillRect(lx,         (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
-                    g.fillRect(rx - 10.0f, 0.0f,                          10.0f, 3.0f);
-                    g.fillRect(rx - 10.0f, (float)area.getHeight() - 3.0f, 10.0f, 3.0f);
+                    g.setColour(juce::Colours::yellow);
+                    g.drawVerticalLine((int)lx, 0.0f, (float)area.getHeight());
+                    g.drawVerticalLine((int)rx, 0.0f, (float)area.getHeight());
                 }
             }
 
-            // ── 4. CUE Point ──────────────────────────────────────────────────
+            // ── 4. CUE ────────────────────────────────────────────────────────
             double cue = audioCore.getDeckCuePoint(deckIdx);
             if (cue >= startTime && cue <= endTime) {
                 float cx = tx(cue);
                 g.setColour(juce::Colours::orange);
-                g.fillRect(cx - 1.0f, 0.0f, 2.0f, (float)area.getHeight());
-                juce::Path tri;
-                tri.addTriangle(cx - 6, 0, cx + 6, 0, cx, 8);
+                g.drawVerticalLine((int)cx, 0.0f, (float)area.getHeight());
+                juce::Path tri; tri.addTriangle(cx - 6, 0, cx + 6, 0, cx, 8);
                 g.fillPath(tri);
             }
-            // NOTE: playhead line is drawn by MixerComponent::paintOverChildren()
-            // at the exact visual centre — do NOT duplicate it here.
-
         } else {
             g.setColour(juce::Colours::grey.withAlpha(0.2f));
             g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
@@ -190,9 +163,7 @@ public:
             g.drawText("DRAG TRACK HERE", area, juce::Justification::centred);
         }
     }
-    void changeListenerCallback(juce::ChangeBroadcaster*) override { 
-        juce::MessageManager::callAsync([this] { repaint(); }); 
-    }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override { juce::MessageManager::callAsync([this] { repaint(); }); }
     void timerCallback() override { repaint(); }
     
     void resized() override {
@@ -227,6 +198,120 @@ private:
     void timerCallback() override { repaint(); }
     AudioCore& audioCore;
     int deckIdx;
+};
+
+class MicControlWidget : public juce::Component, private juce::Timer {
+public:
+    struct MicLF : public juce::LookAndFeel_V4 {
+        juce::Font getTextButtonFont(juce::TextButton&, int) override {
+            return juce::Font(13.0f, juce::Font::bold); 
+        }
+
+        void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                             float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
+            // Forçar área quadrada para evitar distorção (knob redondo)
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
+            
+            auto radius = bounds.getWidth() / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
+
+            // 1. Contorno claro e bem visível
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.drawEllipse(bounds, 2.0f);
+
+            // 2. Corpo do Knob mais claro para destaque
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.5f));
+            
+            // Brilho no topo do knob
+            g.setColour(juce::Colours::white.withAlpha(0.1f));
+            g.fillEllipse(bounds.reduced(4).translated(0, -2));
+
+            // 3. Indicador (Tick) em branco puro
+            g.setColour(juce::Colours::white);
+            juce::Path p;
+            p.addRoundedRectangle(-2.5f, -radius + 2, 5.0f, radius * 0.6f, 1.5f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center));
+            g.fillPath(p);
+        }
+    };
+    MicLF micLF;
+
+    MicControlWidget(AudioCore& ac) : audioCore(ac) {
+        micBtn.setButtonText("MIC");
+        micBtn.setClickingTogglesState(true);
+        micBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
+        micBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
+        micBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+        micBtn.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+        micBtn.setLookAndFeel(&micLF);
+        micBtn.onClick = [this] { audioCore.setMicEnabled(micBtn.getToggleState()); };
+        addAndMakeVisible(micBtn);
+
+        micKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        micKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        micKnob.setLookAndFeel(&micLF);
+        micKnob.setRange(0.0, 1.0, 0.01);
+        micKnob.setValue(audioCore.getMicVolume());
+        micKnob.onValueChange = [this] { audioCore.setMicVolume((float)micKnob.getValue()); };
+        addAndMakeVisible(micKnob);
+
+        startTimer(30);
+    }
+
+    ~MicControlWidget() override {
+        micBtn.setLookAndFeel(nullptr);
+        micKnob.setLookAndFeel(nullptr);
+    }
+
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds();
+        
+        // Pequeno fundo para agrupar
+        g.setColour(juce::Colour(0xff151515));
+        g.fillRoundedRectangle(area.toFloat(), 6.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.drawRoundedRectangle(area.toFloat(), 6.0f, 1.0f);
+
+        // VU Meter horizontal
+        auto vuArea = juce::Rectangle<int>(micBtn.getRight() + 5, 8, area.getWidth() - micBtn.getRight() - 15, 8);
+        g.setColour(juce::Colours::black);
+        g.fillRoundedRectangle(vuArea.toFloat(), 2.0f);
+        
+        if (audioCore.isMicEnabled()) {
+            float level = audioCore.getInputLevel();
+            int w = (int)(vuArea.getWidth() * level);
+            g.setColour(juce::Colours::lime);
+            g.fillRoundedRectangle(vuArea.withWidth(w).toFloat(), 2.0f);
+        }
+        
+        g.setColour(juce::Colours::grey);
+        g.setFont(10.0f);
+        // Removido o texto "MIC" debaixo pois agora está dentro do botão
+    }
+
+    void resized() override {
+        auto area = getLocalBounds().reduced(8);
+        micBtn.setBounds(area.removeFromLeft(50).withSizeKeepingCentre(44, 44).withY(area.getY() + 10));
+        
+        auto rightSide = area;
+        rightSide.removeFromTop(20); 
+        // Forçar o knob a ser um quadrado centralizado para não distorcer
+        int side = std::min(rightSide.getWidth(), rightSide.getHeight());
+        micKnob.setBounds(rightSide.withSizeKeepingCentre(side, side));
+    }
+
+    void timerCallback() override {
+        micBtn.setToggleState(audioCore.isMicEnabled(), juce::dontSendNotification);
+        repaint();
+    }
+
+private:
+    AudioCore& audioCore;
+    juce::TextButton micBtn;
+    juce::Slider micKnob;
 };
 
 class JogWheel : public juce::Component, private juce::Timer {
@@ -305,7 +390,7 @@ private:
     juce::Colour accentColour; juce::Label title, beats; 
 };
 
-class DeckSection : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer {
+class DeckSection : public juce::Component, private juce::Timer {
 public:
     DeckSection(AudioCore& ac, int idx, bool isLeft) 
         : audioCore(ac), deckIdx(idx), leftSide(isLeft), jog(ac, idx, isLeft ? juce::Colours::cyan : juce::Colours::tomato, isLeft),
@@ -409,10 +494,6 @@ public:
         startTimer(16);
     }
 
-    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
-    void filesDropped(const juce::StringArray& files, int, int) override {
-        if (files.size() > 0) (deckIdx == 0 ? audioCore.loadDeckA(juce::File(files[0])) : audioCore.loadDeckB(juce::File(files[0])));
-    }
     void setupButton(juce::TextButton& b, const juce::String& t, juce::Colour c) { addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, c); }
     void paint(juce::Graphics& g) override { g.setColour(juce::Colour(0xff151515)); g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f); }
     void resized() override {
@@ -465,12 +546,20 @@ public:
 
 class MixerCenterSection : public juce::Component {
 public:
-    MixerCenterSection(AudioCore& ac) : audioCore(ac), fxA(ac, 0), fxB(ac, 1) {
+    MixerCenterSection(AudioCore& ac) 
+        : audioCore(ac), 
+          fxA(ac, 0), fxB(ac, 1),
+          micControl(ac),
+          vstControl(ac.getVocalVstChain(), ac.getVstManager())
+    {
         setLookAndFeel(&lookAndFeel);
         
         addAndMakeVisible(content);
         content.addAndMakeVisible(fxA);
         content.addAndMakeVisible(fxB);
+
+        content.addAndMakeVisible(micControl);
+        content.addAndMakeVisible(vstControl);
 
 
         // Side Knobs
@@ -665,6 +754,12 @@ public:
         layoutKnobCol(knobsB, curX, mainY, sideW, mainH);
 
         crossfader.setBounds((w - 400) / 2, h - 80, 400, 50);
+
+        // Posicionar controles de Mic e VST mais à ESQUERDA (no espaço indicado no print)
+        int cfY = h - 85;
+        
+        vstControl.setBounds(40, cfY, 95, 75);
+        micControl.setBounds(145, cfY, 230, 85);
     }
 
 private:
@@ -676,26 +771,26 @@ private:
         }
         void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                              float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
-            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(6);
-            auto radius = std::min(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
             
-            // Minimalist Dark Circle
-            g.setColour(juce::Colour(0xff121212));
-            g.fillEllipse(bounds);
-            g.setColour(juce::Colours::black);
+            auto radius = bounds.getWidth() / 2.0f;
+            auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
+
+            // 1. Contorno claro e bem visível
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
             g.drawEllipse(bounds, 1.5f);
 
-            // Simple indicator tick (like the reference image)
-            auto lineW = 3.5f;
-            auto thumbWidth = lineW;
+            // 2. Corpo do Knob mais claro
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.0f));
+
+            // 3. Indicador (Tick) em branco puro
+            g.setColour(juce::Colours::white);
             juce::Path p;
-            p.addRoundedRectangle(-thumbWidth * 0.5f, -radius, thumbWidth, radius * 0.6f, 1.0f);
-            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
-            
-            // Use cyan for the tick to keep the theme, or light grey if preferred. 
-            // User's right image shows light grey/silver.
-            g.setColour(juce::Colour(0xffcccccc)); 
+            p.addRoundedRectangle(-2.0f, -radius + 2, 4.0f, radius * 0.5f, 1.0f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center));
             g.fillPath(p);
         }
 
@@ -815,47 +910,38 @@ private:
     struct FxKnobLookAndFeel : public CustomLookAndFeel {
         void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                              float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider) override {
-            // Force perfect square so circle is always symmetric
-            float side = (float)std::min(width, height) - 8.0f;
-            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side);
-            auto radius = side / 2.0f;
+            float side = (float)std::min(width, height);
+            auto bounds = juce::Rectangle<float>(x + (width - side) * 0.5f, y + (height - side) * 0.5f, side, side).reduced(3);
+            auto radius = bounds.getWidth() / 2.0f;
             auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+            auto center = bounds.getCentre();
             
-            // Neon Pink / Magenta theme for FX
             juce::Colour neonColor = juce::Colour(0xffff00ff); 
             bool isActive = slider.getProperties()["isActive"];
 
-            // Dark Outer Ring
-            g.setColour(juce::Colour(0xff0d0d0d));
-            g.fillEllipse(bounds);
-            
-            // Inner Circle
-            auto innerBounds = bounds.reduced(6);
-            g.setColour(juce::Colour(0xff1a1a1a));
-            g.fillEllipse(innerBounds);
-            
-            // Indicator and Arc
-            float lineW = 4.0f;
-            float arcRadius = radius - lineW * 0.5f - 2;
-            
-            // Value Arc (Pink)
-            if (isActive) {
-                g.setColour(neonColor.withAlpha(0.2f));
-                juce::Path bgArc;
-                bgArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
-                g.strokePath(bgArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            // 1. Contorno claro
+            g.setColour(juce::Colours::white.withAlpha(0.5f));
+            g.drawEllipse(bounds, 1.5f);
 
-                g.setColour(neonColor);
+            // 2. Corpo do Knob
+            g.setColour(juce::Colour(0xff333333));
+            g.fillEllipse(bounds.reduced(1.0f));
+            
+            // Value Arc (Neon)
+            if (isActive) {
+                float lineW = 3.0f;
+                float arcRadius = radius - 1.5f;
+                g.setColour(neonColor.withAlpha(0.8f));
                 juce::Path valueArc;
-                valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, toAngle, true);
+                valueArc.addCentredArc(center.x, center.y, arcRadius, arcRadius, 0.0f, rotaryStartAngle, toAngle, true);
                 g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
 
-            // Central Indicator Tick
+            // 3. Indicador (Tick)
+            g.setColour(juce::Colours::white);
             juce::Path p;
-            p.addRoundedRectangle(-lineW * 0.5f, -radius + 4, lineW, radius * 0.5f, 1.5f);
-            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(bounds.getCentreX(), bounds.getCentreY()));
-            g.setColour(isActive ? neonColor : juce::Colours::grey);
+            p.addRoundedRectangle(-2.0f, -radius + 2, 4.0f, radius * 0.5f, 1.0f);
+            p.applyTransform(juce::AffineTransform::rotation(toAngle).translated(center.x, center.y));
             g.fillPath(p);
         }
     };
@@ -894,7 +980,7 @@ private:
                 label.setText(name, juce::dontSendNotification);
                 label.setFont(juce::Font(18.0f, juce::Font::bold));
                 label.setJustificationType(juce::Justification::centred);
-                label.setColour(juce::Label::textColourId, juce::Colours::grey.withAlpha(0.6f));
+                label.setColour(juce::Label::textColourId, juce::Colours::white);
             }
             ~FxSlot() { knob.setLookAndFeel(nullptr); }
 
@@ -995,7 +1081,7 @@ private:
             lbl->setText(labelsText[i], juce::dontSendNotification);
             lbl->setFont(juce::Font(12.0f, juce::Font::bold));
             lbl->setJustificationType(juce::Justification::centred);
-            lbl->setColour(juce::Label::textColourId, juce::Colours::grey);
+            lbl->setColour(juce::Label::textColourId, juce::Colours::white);
 
             auto* s = knobs.add(new juce::Slider());
             content.addAndMakeVisible(s);
@@ -1064,16 +1150,25 @@ public:
     juce::OwnedArray<juce::Slider> knobsA, knobsB;
     juce::Slider faderA, faderB, crossfader;
     juce::TextButton cueA, cueB;
+    MicControlWidget micControl;
+    VstControlWidget vstControl;
 
 };
 
 class MixerComponent : public juce::Component, 
                       public juce::FileDragAndDropTarget,
-                      public juce::DragAndDropTarget {
+                      public juce::DragAndDropTarget,
+                      private juce::Timer {
 public:
     MixerComponent(AudioCore& ac, TrackBrowserComponent* b) 
         : audioCore(ac), browser(b), waveA(ac, 0), waveB(ac, 1), deckA(ac, 0, true), deckB(ac, 1, false), mixer(ac) {
         addAndMakeVisible(waveA); addAndMakeVisible(waveB); addAndMakeVisible(deckA); addAndMakeVisible(deckB); addAndMakeVisible(mixer);
+        startTimer(30); // Para Sync e outras lógicas de UI
+    }
+    
+    void timerCallback() override {
+        // Mover a lógica de Sync para cá para evitar travamentos na thread de áudio
+        audioCore.handleSyncLogic();
     }
     
     // External File Drag (Explorer)

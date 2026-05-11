@@ -60,6 +60,7 @@ public:
     bool isDeckLoopEnabled (int deckIdx) const;
     double getDeckLoopStart (int deckIdx) const;
     double getDeckLoopLength (int deckIdx) const;
+    double getDeckSourceSampleRate (int deckIdx) const;
     double getMainTrackBpm() const { return mainTrackBpm * (1.0 + (deckHPitch * 0.06)); }
     double getMainTrackPosition() const;
     double getMainTrackLength() const;
@@ -183,6 +184,7 @@ public:
         return deckHCue;
     }
     void triggerDeckCue (int deckIdx);
+    void handleSyncLogic();
     
     VocalVstChain& getVocalVstChain() { return vocalVstChain; }
     PluginScannerManager& getVstManager() { return vstManager; }
@@ -205,7 +207,6 @@ private:
     bool syncEnabled[2] = { false, false };
     TrackDatabase* trackDb = nullptr;
     
-    void handleSyncLogic();
     
     // Waveform Rendering Support
     juce::AudioThumbnailCache thumbnailCache { 10 };
@@ -347,14 +348,17 @@ private:
         void setLoopRange(juce::int64 start, juce::int64 length);
         juce::int64 getLoopStart() const { return loopStart; }
         juce::int64 getLoopLength() const { return loopLength; }
+        double getSourceSampleRate() const { return sourceSampleRate; }
 
     private:
         std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
         double currentSampleRate = 44100.0;
+        double sourceSampleRate = 44100.0;
         bool looping = false;
         juce::int64 loopStart = 0;
         juce::int64 loopLength = 0;
         int crossfadeSamples = 220; // 5ms in samples
+        juce::AudioBuffer<float> tailBuffer, headBuffer;
     };
 
     // PlaybackChannel: now defined AFTER CrossfadingLoopSource
