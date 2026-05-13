@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "Controllers/ControllerSandboxWindow.h"
+#include "LanguageManager.h"
 
 MainComponent::MainComponent() 
     : rgbManager (inputManager.getSerialManager()),
@@ -8,6 +9,17 @@ MainComponent::MainComponent()
     setLookAndFeel (&customTheme);
     juce::LookAndFeel::setDefaultLookAndFeel(&customTheme);
     
+    // Initialize Language — robust multi-path lookup
+    auto langDir = LanguageManager::getLangDirectory();
+    auto langFile = langDir.getChildFile("pt_br.xml");
+    
+    if (langFile.existsAsFile())
+        LanguageManager::getInstance().loadLanguage(langFile);
+    else
+        DBG("WARNING: pt_br.xml not found — UI will use key names as fallback text");
+    
+    LanguageManager::getInstance().addChangeListener(this);
+
     // Initialize Data
     audioEngine.setDatabase(&trackDb);
     browser = std::make_unique<TrackBrowserComponent>(trackDb, analysisManager, driveManager);
@@ -479,34 +491,37 @@ void MainComponent::resized() {
 
 // MenuBarModel Implementation
 juce::StringArray MainComponent::getMenuBarNames() {
-    return { "Geral", "Controladores", "Layout", "Plugins", juce::String::fromUTF8("Ajuda") };
+    return { TJS_L("MENU_GENERAL"), TJS_L("MENU_SETTINGS"), TJS_L("MENU_LAYOUT"), TJS_L("MENU_PLUGINS"), TJS_L("MENU_HELP") };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String& menuName) {
     juce::PopupMenu menu;
-    if (menuName == "Geral") {
+    
+    // We compare against the keys or the localized names? 
+    // Usually it's better to use topLevelMenuIndex to be language-independent
+    if (topLevelMenuIndex == 0) {
         menu.addCommandItem(&commandManager, navFx);
         menu.addCommandItem(&commandManager, navFxTouch);
         menu.addCommandItem(&commandManager, navRgb);
         menu.addCommandItem(&commandManager, navLearn);
         menu.addCommandItem(&commandManager, navSerial);
         menu.addCommandItem(&commandManager, navConfig);
-    } else if (menuName == "Controladores") {
-        menu.addItem(300, "Gerenciar Mapeamentos...");
+    } else if (topLevelMenuIndex == 1) {
+        menu.addItem(300, TJS_L("MENU_MANAGE_HARDWARE"));
         menu.addSeparator();
-        menu.addItem(301, "Recarregar Mapeamento Atual");
-    } else if (menuName == "Layout") {
-        menu.addItem(1, "DJ Hand Free", true, currentMode == LayoutMode::HandFree);
-        menu.addItem(2, "DJ Mixer", true, currentMode == LayoutMode::Mixer);
-    } else if (menuName == "Plugins") {
-        menu.addItem(100, "Rescan All");
+        menu.addItem(301, TJS_L("MENU_RELOAD_MAPPING"));
+    } else if (topLevelMenuIndex == 2) {
+        menu.addItem(1, TJS_L("MENU_DJ_HAND_FREE"), true, currentMode == LayoutMode::HandFree);
+        menu.addItem(2, TJS_L("MENU_DJ_MIXER"), true, currentMode == LayoutMode::Mixer);
+    } else if (topLevelMenuIndex == 3) {
+        menu.addItem(100, TJS_L("MENU_RESCAN_PLUGINS"));
         menu.addSeparator();
-        menu.addItem(200, juce::CharPointer_UTF8("\xf0\x9f\x8e\x9b\xef\xb8\x8f  Controller Sandbox (Dev)"));
-    } else if (menuName == juce::String::fromUTF8("Ajuda")) {
-        menu.addItem(10, juce::String::fromUTF8("Sobre"));
-        menu.addItem(11, juce::String::fromUTF8("Licença e Uso"));
+        menu.addItem(200, juce::String(juce::CharPointer_UTF8("\xf0\x9f\x8e\x9b\xef\xb8\x8f  ")) + TJS_L("MENU_CONTROLLER_SANDBOX"));
+    } else if (topLevelMenuIndex == 4) {
+        menu.addItem(10, TJS_L("MENU_ABOUT"));
+        menu.addItem(11, TJS_L("MENU_LICENSE"));
         menu.addSeparator();
-        menu.addItem(20, juce::String::fromUTF8("❤️ Doar / Apoiar"));
+        menu.addItem(20, TJS_L("MENU_DONATE"));
     }
     return menu;
 }
@@ -548,28 +563,28 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     switch (commandID)
     {
     case navFx:
-        result.setInfo("FX", "Navegar para aba de FX", "Navigation", 0);
+        result.setInfo("FX", TJS_L("DESC_NAV_FX"), "Navigation", 0);
         result.addDefaultKeypress('f', juce::ModifierKeys::commandModifier);
         break;
     case navFxTouch:
-        result.setInfo("FX Touch", "Navegar para aba de FX Touch", "Navigation", 0);
+        result.setInfo("FX Touch", TJS_L("DESC_NAV_FX_TOUCH"), "Navigation", 0);
         result.addDefaultKeypress('t', juce::ModifierKeys::commandModifier);
         break;
     case navRgb:
-        result.setInfo("RGB", "Navegar para aba de RGB", "Navigation", 0);
+        result.setInfo("RGB", TJS_L("DESC_NAV_RGB"), "Navigation", 0);
         result.addDefaultKeypress('r', juce::ModifierKeys::commandModifier);
         break;
     case navLearn:
-        result.setInfo("Learn", "Navegar para aba de MIDI Learn", "Navigation", 0);
+        result.setInfo("Learn", TJS_L("DESC_NAV_LEARN"), "Navigation", 0);
         result.addDefaultKeypress('l', juce::ModifierKeys::commandModifier);
         break;
     case navSerial:
-        result.setInfo("Serial", "Navegar para aba de Serial", "Navigation", 0);
+        result.setInfo("Serial", TJS_L("DESC_NAV_SERIAL"), "Navigation", 0);
         result.addDefaultKeypress(',', juce::ModifierKeys::commandModifier);
         result.addDefaultKeypress('m', juce::ModifierKeys::commandModifier);
         break;
     case navConfig:
-        result.setInfo("Config", "Navegar para aba de Configurações", "Navigation", 0);
+        result.setInfo("Config", TJS_L("DESC_NAV_CONFIG"), "Navigation", 0);
         result.addDefaultKeypress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
         break;
     default:
@@ -630,13 +645,10 @@ void MainComponent::showAboutWindow() {
     
     juce::Image icon = juce::ImageCache::getFromFile(iconFile);
     
-    juce::String msg = juce::String::fromUTF8("Tridjs Live Suite\n\n"
-                      "Versão: Beta 1.0\n"
-                      "Autor: DJ Exder (Coletivo TriDJS)\n"
-                      "Segurança da Informação: DJ Christian Mauro");
+    juce::String msg = TJS_L("ABOUT_MSG");
 
     // AlertWindow instance to allow custom components (like the icon at the top)
-    auto* aw = new juce::AlertWindow(juce::String::fromUTF8("Sobre"), "", juce::MessageBoxIconType::NoIcon);
+    auto* aw = new juce::AlertWindow(TJS_L("ABOUT_TITLE"), "", juce::MessageBoxIconType::NoIcon);
     
     if (icon.isValid()) {
         auto imgComp = std::make_unique<juce::ImageComponent>();
@@ -661,18 +673,13 @@ void MainComponent::showAboutWindow() {
 }
 
 void MainComponent::showLicenseWindow() {
-    juce::String msg = juce::String::fromUTF8("Uso: Software gratuito para uso pessoal e profissional.\n\n"
-                      "Proibição: É estritamente proibida a venda deste software.\n\n"
-                      "Modificações (GitHub): Em caso de modificação do código-fonte disponível no GitHub, "
-                      "é obrigatório manter e dar os devidos créditos ao desenvolvedor original (DJ Exder) "
-                      "e ao Coletivo TriDJS.\n\n"
-                      "Direitos: Direitos reservados ao Coletivo TriDJS (Marca Registrada).");
+    juce::String msg = TJS_L("LICENSE_MSG");
 
     auto opts = juce::MessageBoxOptions()
-        .withTitle(juce::String::fromUTF8("Licença e Uso"))
+        .withTitle(TJS_L("LICENSE_TITLE"))
         .withMessage(msg)
-        .withButton("OK")
-        .withButton("Visitar Site");
+        .withButton(TJS_L("BTN_OK"))
+        .withButton(TJS_L("BTN_VISIT_SITE"));
 
     juce::AlertWindow::showAsync(opts, [this](int result) {
         if (result == 2) { // Second button (Visitar Site)
@@ -682,20 +689,13 @@ void MainComponent::showLicenseWindow() {
 }
 
 void MainComponent::showDonateWindow() {
-    juce::String msg = juce::String::fromUTF8("\"Fortaleça a Revolução DJ Hand Free!\"\n\n"
-                      "O Tridjs Live Suite nasceu com a missão de quebrar as barreiras entre o artista e a tecnologia. "
-                      "Nosso objetivo é fomentar a cultura da música eletrônica, oferecendo ferramentas autorais que "
-                      "permitem uma performance única e expressiva.\n\n"
-                      "Ao apoiar este projeto, você ajuda o Coletivo TriDJs a manter o software gratuito para todos, "
-                      "a investir em novos sensores para a tecnologia de gestos e a fortalecer a cena musical no Brasil e no mundo.\n\n"
-                      "Sua doação é um investimento na liberdade criativa.\n\n"
-                      "AVISO DE SEGURANÇA: Por segurança, todas as contribuições são processadas exclusivamente através do nosso site oficial.");
+    juce::String msg = TJS_L("DONATE_MSG");
 
     auto opts = juce::MessageBoxOptions()
-        .withTitle(juce::String::fromUTF8("Apoie o Movimento TriDJS"))
+        .withTitle(TJS_L("DONATE_TITLE"))
         .withMessage(msg)
-        .withButton("Talvez Depois")
-        .withButton(juce::String::fromUTF8("Fazer parte dessa história (Site Seguro)"));
+        .withButton(TJS_L("BTN_MAYBE_LATER"))
+        .withButton(TJS_L("BTN_BE_PART"));
 
     juce::AlertWindow::showAsync(opts, [](int result) {
         if (result == 2) { // Second button (Fazer parte desta história)
@@ -1242,5 +1242,14 @@ void MainComponent::processControllerEvents()
             default:
                 break;
         }
+    }
+}
+
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &LanguageManager::getInstance())
+    {
+        // Notify the menu bar model that names have changed
+        this->menuItemsChanged();
     }
 }

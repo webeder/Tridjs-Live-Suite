@@ -1,4 +1,5 @@
 #include "PadsGridComponent.h"
+#include "LanguageManager.h"
 
 PadsGridComponent::PadsGridComponent()
 {
@@ -31,6 +32,25 @@ PadsGridComponent::PadsGridComponent()
         pitchSlider.setValue(0.0, juce::sendNotification);
     };
     addAndMakeVisible (resetBtn);
+
+    LanguageManager::getInstance().addChangeListener(this);
+    updateLanguage();
+}
+
+PadsGridComponent::~PadsGridComponent()
+{
+    LanguageManager::getInstance().removeChangeListener(this);
+}
+
+void PadsGridComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    updateLanguage();
+}
+
+void PadsGridComponent::updateLanguage()
+{
+    resetBtn.setButtonText(TJS_L("HF_RESET"));
+    repaint();
 }
 
 void PadsGridComponent::updateBpmDisplay(double bpm)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "LanguageManager.h"
 #include <vector>
 #include <memory>
 #include <functional>
@@ -141,14 +142,19 @@ public:
     juce::TextButton modeBtn;
 };
 
-class FxRackComponent : public juce::Component, public juce::Timer
+class FxRackComponent : public juce::Component, 
+                        public juce::Timer,
+                        public juce::ChangeListener
 {
 public:
     FxRackComponent(juce::AudioDeviceManager& deviceManager);
-    ~FxRackComponent() override = default;
+    ~FxRackComponent() override;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
     
     bool isRgbTabActive() const;
     juce::Colour getSelectedColor() const;
@@ -322,9 +328,12 @@ public:
         std::function<void(bool)> onLearnToggled;
         std::function<void(const juce::String&)> onManualEntry;
         std::function<void()> onClear;
+        void updateLanguage() {
+            learnBtn.setButtonText(TJS_L("FX_LEARN"));
+        }
     private:
         juce::Label label; juce::Label valueBox;
-        juce::TextButton learnBtn { "LEARN" }; juce::TextButton clearBtn { "X" };
+        juce::TextButton learnBtn { "" }; juce::TextButton clearBtn { "X" };
     };
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
@@ -340,7 +349,7 @@ public:
     juce::TextButton deleteGlobalPresetBtn { "DELETE" };
     juce::TextButton removeRgbBrushBtn { "REMOVE EFFECT" };
     juce::TextEditor presetNameEdit;
-    juce::Label presetNameLabel { {}, "SESSION NAME:" };
+    juce::Label presetNameLabel { {}, "" };
     juce::ComboBox commandCombo;
     juce::Viewport targetViewport;
     juce::Component targetListContent;
@@ -357,8 +366,8 @@ public:
     juce::ComboBox inputModeCombo, serialPortCombo;
     juce::ToggleButton logCheckbox { "Log" };
     juce::TextEditor serialLog;
-    juce::Label inputModeLabel { {}, "INPUT MODE" };
-    juce::Label serialPortLabel { {}, "SERIAL PORT (115200)" };
+    juce::Label inputModeLabel { {}, "" };
+    juce::Label serialPortLabel { {}, "" };
     juce::Component configContent;
     juce::ImageButton saveConfigBtn, openConfigBtn;
     juce::Image configIcon;

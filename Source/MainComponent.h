@@ -34,7 +34,8 @@ class MainComponent  : public juce::AudioAppComponent,
                        public juce::DragAndDropContainer,
                        public juce::Timer,
                        public juce::MenuBarModel,
-                       public juce::ApplicationCommandTarget
+                       public juce::ApplicationCommandTarget,
+                       public juce::ChangeListener
 {
 public:
     MainComponent();
@@ -58,6 +59,8 @@ public:
     void getAllCommands (juce::Array<juce::CommandID>& commands) override;
     void getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& result) override;
     bool perform (const InvocationInfo& info) override;
+    
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
 
     enum CommandIDs
     {

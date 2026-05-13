@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language name="Français">
+    <!-- Main Tabs / Navigation -->
+    <entry key="TAB_CONTROLLERS" value="Contrôleurs"/>
+    <entry key="TAB_SETTINGS" value="Paramètres"/>
+    <entry key="TAB_LANGUAGES" value="Langues"/>
+    <entry key="BTN_ADD_CONTROLLER" value="Ajouter Contrôleur"/>
+    <entry key="LINK_SUPPORT" value="Support Technique"/>
+    <entry key="LINK_FIRMWARE" value="Mettre à jour le Firmware"/>
+    
+    <!-- Hardware Manager -->
+    <entry key="HW_MANAGER_SUBTITLE" value="GESTION DE MATÉRIEL PROFESSIONNEL"/>
+    <entry key="HW_MANAGER_SECTION" value="CONFIGURATION DU SYSTÈME"/>
+    <entry key="SEARCH_DEVICES" value="Rechercher des appareils..."/>
+    <entry key="COL_NAME" value="NOM"/>
+    <entry key="COL_MODEL" value="MODÈLE"/>
+    <entry key="COL_VERSION" value="VERSION"/>
+    <entry key="COL_ACTIONS" value="ACTIONS"/>
+    <entry key="BTN_ACTIVATE" value="ACTIVER"/>
+    <entry key="DEV_SECTION_MSG" value="Cette section est en cours de développement pour de futures mises à jour."/>
+    <entry key="FILE_CHOOSER_TITLE" value="Sélectionnez le fichier de mapping (.midi.xml)"/>
+	
+	<!-- Menu Bar -->
+    <entry key="MENU_GENERAL" value="Général"/>
+    <entry key="MENU_SETTINGS" value="Paramètres"/>
+    <entry key="MENU_LAYOUT" value="Mise en page"/>
+    <entry key="MENU_PLUGINS" value="Plugins"/>
+    <entry key="MENU_HELP" value="Aide"/>
+    <entry key="MENU_MANAGE_HARDWARE" value="Gérer le matériel..."/>
+    <entry key="MENU_RELOAD_MAPPING" value="Recharger le mappage actuel"/>
+    <entry key="MENU_DJ_HAND_FREE" value="DJ Hand Free"/>
+    <entry key="MENU_DJ_MIXER" value="DJ Mixer"/>
+    <entry key="MENU_RESCAN_PLUGINS" value="Rescan All"/>
+    <entry key="MENU_CONTROLLER_SANDBOX" value="Controller Sandbox (Dev)"/>
+    <entry key="MENU_ABOUT" value="À propos"/>
+    <entry key="MENU_LICENSE" value="Licence et utilisation"/>
+    <entry key="MENU_DONATE" value="❤️ Faire un don / Soutenir"/>
+
+    <!-- Mixer / Decks -->
+    <entry key="MIXER_DRAG_TRACK" value="GLISSER UNE PISTE ICI"/>
+    <entry key="MIXER_MASTER" value="MASTER"/>
+    <entry key="MIXER_SLAVE" value="SLAVE"/>
+    <entry key="MIXER_PLAY" value="PLAY"/>
+    <entry key="MIXER_PAUSE" value="PAUSE"/>
+    <entry key="MIXER_STOP" value="STOP"/>
+    <entry key="MIXER_CUE" value="CUE"/>
+    <entry key="MIXER_SYNC" value="SYNC"/>
+    <entry key="MIXER_REV" value="REV"/>
+    
+    <!-- Loop Controls -->
+    <entry key="LOOP_TITLE" value="BOUCLE"/>
+    <entry key="LOOP_IN" value="IN"/>
+    <entry key="LOOP_OUT" value="OUT"/>
+    <entry key="LOOP_AUTO" value="AUTO"/>
+    <entry key="LOOP_BEAT" value="BEAT"/>
+    <entry key="LOOP_BEATS" value="BEATS"/>
+    
+    <!-- Filters / FX -->
+    <entry key="FILTER_TITLE" value="FILTRE TACTILE"/>
+    <entry key="FILTER_LP_FLANGER" value="LP + FLANGER"/>
+    <entry key="FILTER_HP_ECHO" value="HP + ECHO"/>
+    <entry key="FILTER_LP_RES" value="LP + RES"/>
+    <entry key="FILTER_HP_RES" value="HP + RES"/>
+    <entry key="FILTER_CUTOFF" value="COUPURE"/>
+    <entry key="FILTER_RESONANCE" value="RÉSONANCE"/>
+    
+    <!-- Mic / VST -->
+    <entry key="MIC_LABEL" value="MIC"/>
+    <entry key="VST_LABEL" value="VST FX"/>
+    
+    <!-- Hand-Free / Header -->
+    <entry key="HF_MUSIC_BROWSER" value="NAVIGATEUR MUSICAL"/>
+    <entry key="HF_PITCH" value="PITCH"/>
+    <entry key="HF_RESET" value="RÉINITIALISER"/>
+    <entry key="HF_QUANT" value="QUANT"/>
+    <entry key="HF_REC" value="ENREGISTRER"/>
+    <entry key="HF_ANALYZING" value="ANALYSE EN COURS..."/>
+    <entry key="HF_READY" value="PRÊT: "/>
+    <entry key="HF_PLAYING" value="LECTURE: "/>
+    <entry key="HF_NO_TRACK" value="PAS DE PISTE"/>
+    
+    <!-- Stems -->
+    <entry key="STEM_VOCAL" value="VOIX"/>
+    <entry key="STEM_DRUMS" value="BATTERIE"/>
+    <entry key="STEM_BASS" value="BASSE"/>
+    
+    <!-- FX Rack -->
+    <entry key="FX_ULTRA_MULTI" value="ULTRA MULTI-FX"/>
+    <entry key="FX_SAVE_SESSION" value="SAUVEGARDER SESSION"/>
+    <entry key="FX_LOAD" value="CHARGER"/>
+    <entry key="FX_DELETE" value="SUPPRIMER"/>
+    <entry key="FX_REMOVE" value="RETIRER L'EFFET"/>
+    <entry key="FX_SESSION_NAME" value="NOM DE LA SESSION:"/>
+    <entry key="FX_INPUT_MODE" value="MODE D'ENTRÉE"/>
+    <entry key="FX_SERIAL_PORT" value="PORT SÉRIE (115200)"/>
+    <entry key="FX_LEARN" value="LEARN"/>
+    
+    <!-- Footer -->
+    <entry key="FOOTER_MASTER_BPM" value="BPM MASTER"/>
+	<entry key="ABOUT_TITLE" value="À propos"/>
+    <entry key="ABOUT_MSG" value="Tridjs Live Suite&#10;&#10;Version : Bêta 1.0&#10;Auteur : DJ Exder (Collectif TriDJS)&#10;Sécurité de l'information : DJ Christian Mauro"/>
+    <entry key="LICENSE_TITLE" value="Licence et utilisation"/>
+    <entry key="LICENSE_MSG" value="Utilisation : Logiciel gratuit pour usage personnel et professionnel.&#10;&#10;Interdiction : La vente de ce logiciel est strictement interdite.&#10;&#10;Modifications (GitHub) : En cas de modification du code source disponible sur GitHub, il est obligatoire de maintenir et de créditer le développeur original (DJ Exder) et le Collectif TriDJS.&#10;&#10;Droits : Droits réservés au Collectif TriDJS (Marque déposée)."/>
+    <entry key="DONATE_TITLE" value="Soutenez le mouvement TriDJS"/>
+    <entry key="DONATE_MSG" value="&quot;Renforcez la révolution DJ Hand Free !&quot;&#10;&#10;Tridjs Live Suite est né avec la mission de briser les barrières entre l'artiste et la technologie. Notre objectif est de promouvoir la culture de la musique électronique en proposant des outils originaux permettant une performance unique et expressive.&#10;&#10;En soutenant ce projet, vous aidez le Collectif TriDJS à maintenir le logiciel gratuit pour tous, à investir dans de nouveaux capteurs pour la technologie gestuelle et à renforcer la scène musicale au Brésil et dans le monde.&#10;&#10;Votre don est un investissement dans la liberté créative.&#10;&#10;AVIS DE SÉCURITÉ : Par sécurité, toutes les contributions sont traitées exclusivement via notre site officiel."/>
+    <entry key="BTN_OK" value="OK"/>
+    <entry key="BTN_VISIT_SITE" value="Visiter le site"/>
+    <entry key="BTN_MAYBE_LATER" value="Peut-être plus tard"/>
+    <entry key="BTN_BE_PART" value="Faire partie de cette histoire (Site sécurisé)"/>
+    <entry key="EXIT_SAVE_QUESTION" value="Voulez-vous sauvegarder l'état actuel de la session ?"/>
+    <entry key="EXIT_YES" value="Oui"/>
+    <entry key="EXIT_NO" value="Non"/>
+    
+</language>

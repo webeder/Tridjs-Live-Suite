@@ -1,18 +1,23 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "LanguageManager.h"
 #include "PadComponent.h"
 #include <memory>
 #include <vector>
 
-class PadsGridComponent : public juce::Component
+class PadsGridComponent : public juce::Component,
+                          public juce::ChangeListener
 {
 public:
     PadsGridComponent();
-    ~PadsGridComponent() override = default;
+    ~PadsGridComponent() override;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
     
     std::vector<std::unique_ptr<PadComponent>>& getPads() { return pads; }
     
@@ -26,7 +31,7 @@ private:
     // Tempo Control Side Panel
     juce::Slider pitchSlider;
     juce::Label bpmLcd { {}, "120.00" };
-    juce::TextButton resetBtn { "RESET" };
+    juce::TextButton resetBtn { "" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PadsGridComponent)
 };

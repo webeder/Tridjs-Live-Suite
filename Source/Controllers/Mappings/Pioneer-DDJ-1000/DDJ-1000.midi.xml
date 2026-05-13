@@ -1,0 +1,859 @@
+<?xml version='1.0' encoding='utf-8'?>
+<MixxxControllerPreset mixxxVersion="" schemaVersion="1">
+    <info>
+        <name>DDJ-1000</name>
+        <author>Arnold Kalambani</author>
+        <description>DDJ-1000 mapping Channel1</description>
+    </info>
+    <controller id="DDJ-1000">
+        <scriptfiles>
+            <file functionprefix="PioneerDDJ1000" filename="Pioneer-DDJ_1000-scripts.js"/>
+        </scriptfiles>
+        <controls>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter3</key>
+                <description>EG HIGH KNOB LSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x27</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter3</key>
+                <description>EG HIGH KNOB LSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x27</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>volume</key>
+                <description>Volume Fader CH1</description>
+                <status>0xB0</status>
+                <midino>0x13</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>PioneerDDJ1000.wheelTouch</key>
+                <description>JOG Touch</description>
+                <status>0x90</status>
+                <midino>0x36</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>volume</key>
+                <description>Volume Fader CH2</description>
+                <status>0xB1</status>
+                <midino>0x13</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>PioneerDDJ1000.wheelTouch</key>
+                <description>JOG Touch CH2</description>
+                <status>0x91</status>
+                <midino>0x36</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel]</group>
+                <key>PioneerDDJ1000.MaxTempoChangeCH1</key>
+                <description>Tempo Change CH1</description>
+                <status>0x90</status>
+                <midino>0x60</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>pregain</key>
+                <description>GAIN KNOB LSB</description>
+                <status>0xB0</status>
+                <midino>0x24</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channe2]</group>
+                <key>PioneerDDJ1000.MaxTempoChangeCH2</key>
+                <description>Tempo Change CH2</description>
+                <status>0x91</status>
+                <midino>0x60</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Master]</group>
+                <key>crossfader</key>
+                <description>FX 2nd KNOX (Sampler Button)</description>
+                <status>0xB6</status>
+                <midino>0x3F</midino>
+                <options>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>pregain</key>
+                <description>GAIN KNOB LSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x24</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter2</key>
+                <description>EQ MEDIUM KNOB LSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x2B</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Library]</group>
+                <key>MoveFocusForward</key>
+                <description>CHANGE FOCUS TO RIGHT</description>
+                <status>0x96</status>
+                <midino>0x7A</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter2</key>
+                <description>EQ MEDIUM KNOB LSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x2B</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>cue_default</key>
+                <description>CUE CH1</description>
+                <status>0x90</status>
+                <midino>0x0C</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>cue_default</key>
+                <description>CUE CH2</description>
+                <status>0x91</status>
+                <midino>0x0C</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Library]</group>
+                <key>MoveFocusBackward</key>
+                <description>CHANGE FOCUS TO LEFT</description>
+                <status>0x96</status>
+                <midino>0x65</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>PioneerDDJ1000.FxChainSelectorPrevious</key>
+                <description>FX select previous</description>
+                <status>0x90</status>
+                <midino>0x25</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>loop_out</key>
+                <description>OUT Loop CH1</description>
+                <status>0x90</status>
+                <midino>0x11</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EffectRack1_EffectUnit1_Effect1]</group>
+                <key>meta</key>
+                <description>FX Dry/Wet (Master FX Knob)</description>
+                <status>0xB4</status>
+                <midino>0x02</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>loop_out</key>
+                <description>OUT Loop CH2</description>
+                <status>0x91</status>
+                <midino>0x11</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter1</key>
+                <description>EQ LOW KNOB LSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x2F</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter1</key>
+                <description>EQ LOW KNOB LSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x2F</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Library]</group>
+                <key>MoveVertical</key>
+                <description>BROWSER KNOB ALL CH</description>
+                <status>0xB6</status>
+                <midino>0x40</midino>
+                <options>
+                    <selectknob/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>loop_in</key>
+                <description>IN Loop</description>
+                <status>0x90</status>
+                <midino>0x10</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>loop_in</key>
+                <description>IN Loop</description>
+                <status>0x91</status>
+                <midino>0x10</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>rate</key>
+                <description>Tempo Fader CH1</description>
+                <status>0xB0</status>
+                <midino>0x00</midino>
+                <options>
+                    <invert/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>rate</key>
+                <description>Tempo Fader CH2</description>
+                <status>0xB1</status>
+                <midino>0x00</midino>
+                <options>
+                    <invert/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter3</key>
+                <description>EG HIGH KNOB MSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x07</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter3</key>
+                <description>EG HIGH KNOB MSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x07</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>pfl</key>
+                <description>PFL/HEADPHONE CH1</description>
+                <status>0x90</status>
+                <midino>0x54</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>pfl</key>
+                <description>PFL/HEADPHONE CH2</description>
+                <status>0x91</status>
+                <midino>0x54</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_4_activate</key>
+                <description>HOT_CUE 4 CH1</description>
+                <status>0x97</status>
+                <midino>0x03</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>reloop_toggle</key>
+                <description>RELOOP</description>
+                <status>0x90</status>
+                <midino>0x14</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>reloop_toggle</key>
+                <description>RELOOP CH2</description>
+                <status>0x91</status>
+                <midino>0x14</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>slip_enabled</key>
+                <description>SLIP CH1</description>
+                <status>0x90</status>
+                <midino>0x40</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>hotcue_4_activate</key>
+                <description>HOT_CUE 4 CH2</description>
+                <status>0x99</status>
+                <midino>0x03</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>pregain</key>
+                <description>GAIN KNOB MSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x04</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>slip_enabled</key>
+                <description>SLIP CH2</description>
+                <status>0x91</status>
+                <midino>0x40</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Master]</group>
+                <key>crossfader</key>
+                <description>FX 2nd KNOX (Sampler Button)</description>
+                <status>0xB6</status>
+                <midino>0x1F</midino>
+                <options>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>pregain</key>
+                <description>GAIN KNOB MSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x04</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_3_activate</key>
+                <description>HOT_CUE 3 CH1</description>
+                <status>0x97</status>
+                <midino>0x02</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>hotcue_3_activate</key>
+                <description>HOT_CUE 3 CH2</description>
+                <status>0x99</status>
+                <midino>0x02</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter2</key>
+                <description>EQ MEDIUM KNOB MSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x0B</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter2</key>
+                <description>EQ MEDIUM KNOB MSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x0B</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[EffectRack1_EffectUnit1_Effect1]</group>
+                <key>enabled</key>
+                <description>FX On (Mixer Big Button)</description>
+                <status>0x94</status>
+                <midino>0x47</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_2_activate</key>
+                <description>HOT_CUE 2 CH1</description>
+                <status>0x97</status>
+                <midino>0x01</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>LoadSelectedTrack</key>
+                <description>LOAD TRACK CH2</description>
+                <status>0x96</status>
+                <midino>0x47</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>hotcue_2_activate</key>
+                <description>HOT_CUE 2 CH2</description>
+                <status>0x99</status>
+                <midino>0x01</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>sync_enabled</key>
+                <description>SYNC CH1</description>
+                <status>0x90</status>
+                <midino>0x58</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>PioneerDDJ1000.FxChainSelectorNext</key>
+                <description>FX select next</description>
+                <status>0x90</status>
+                <midino>0x2D</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>sync_enabled</key>
+                <description>SYNC CH2</description>
+                <status>0x91</status>
+                <midino>0x58</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_1_activate</key>
+                <description>HOT_CUE 1 CH1</description>
+                <status>0x97</status>
+                <midino>0x00</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>hotcue_1_activate</key>
+                <description>HOT_CUE 1 CH2</description>
+                <status>0x99</status>
+                <midino>0x00</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>LoadSelectedTrack</key>
+                <description>LOAD TRACK CH1</description>
+                <status>0x96</status>
+                <midino>0x46</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>fwd</key>
+                <description>Forward</description>
+                <status>0x90</status>
+                <midino>0x71</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>fwd</key>
+                <description>Forward</description>
+                <status>0x91</status>
+                <midino>0x71</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel1]_Effect1]</group>
+                <key>parameter1</key>
+                <description>EQ LOW KNOB MSB CH1</description>
+                <status>0xB0</status>
+                <midino>0x0F</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[EqualizerRack1_[Channel2]_Effect1]</group>
+                <key>parameter1</key>
+                <description>EQ LOW KNOB MSB CH2</description>
+                <status>0xB1</status>
+                <midino>0x0F</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-msb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>PioneerDDJ1000.wheelTurn</key>
+                <description>JOG Turn</description>
+                <status>0xB0</status>
+                <midino>0x22</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>back</key>
+                <description>Rewind</description>
+                <status>0x90</status>
+                <midino>0x70</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>PioneerDDJ1000.wheelTurn</key>
+                <description>JOG Turn</description>
+                <status>0xB1</status>
+                <midino>0x22</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>back</key>
+                <description>Rewind</description>
+                <status>0x91</status>
+                <midino>0x70</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[EffectRack1_EffectUnit1_Effect1]</group>
+                <key>meta</key>
+                <description>FX Dry/Wet (Master FX Knob)</description>
+                <status>0xB4</status>
+                <midino>0x22</midino>
+                <options>
+                    <selectknob/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>play</key>
+                <description>PLAY/PAUSE CH1</description>
+                <status>0x90</status>
+                <midino>0x0B</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>play</key>
+                <description>PLAY/PAUSE CH2</description>
+                <status>0x91</status>
+                <midino>0x0B</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>PioneerDDJ1000.wheelTurn</key>
+                <description>JOG Turn</description>
+                <status>0xB0</status>
+                <midino>0x21</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>PioneerDDJ1000.wheelTurn</key>
+                <description>JOG Turn CH2</description>
+                <status>0xB1</status>
+                <midino>0x21</midino>
+                <options>
+                    <script-binding/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>rate</key>
+                <description>Tempo Fader CH1</description>
+                <status>0xB0</status>
+                <midino>0x20</midino>
+                <options>
+                    <invert/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>rate</key>
+                <description>Tempo Fader CH2</description>
+                <status>0xB1</status>
+                <midino>0x20</midino>
+                <options>
+                    <invert/>
+                    <fourteen-bit-lsb/>
+                </options>
+            </control>
+        </controls>
+        <outputs>
+            <output>
+                <group>[Channel1]</group>
+                <key>loop_in</key>
+                <description>IN Loop</description>
+                <status>0x90</status>
+                <midino>0x10</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>cue_indicator</key>
+                <description>Cue flashing CH2</description>
+                <status>0x91</status>
+                <midino>0x0C</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>loop_out</key>
+                <description>OUT Loop CH2</description>
+                <status>0x91</status>
+                <midino>0x11</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>loop_out</key>
+                <description>OUT Loop CH1</description>
+                <status>0x90</status>
+                <midino>0x11</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>play_indicator</key>
+                <description>Play/PAUSE flashing</description>
+                <status>0x90</status>
+                <midino>0x0B</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>play_indicator</key>
+                <description>Play/PAUSE flashing CH2</description>
+                <status>0x91</status>
+                <midino>0x0B</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>pfl</key>
+                <description>PFL LED CH2</description>
+                <status>0x91</status>
+                <midino>0x54</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>slip_enabled</key>
+                <description>SLIP LED CH1</description>
+                <status>0x90</status>
+                <midino>0x40</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>cue_indicator</key>
+                <description>Cue flashing</description>
+                <status>0x90</status>
+                <midino>0x0C</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>sync_enabled</key>
+                <description>SYNC LED CH1</description>
+                <status>0x90</status>
+                <midino>0x58</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>loop_in</key>
+                <description>IN Loop CH2</description>
+                <status>0x91</status>
+                <midino>0x10</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>reloop_toggle</key>
+                <description>RELOOP CH2</description>
+                <status>0x91</status>
+                <midino>0x14</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>pfl</key>
+                <description>PFL LED CH1</description>
+                <status>0x90</status>
+                <midino>0x54</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel1]</group>
+                <key>reloop_toggle</key>
+                <description>RELOOP</description>
+                <status>0x90</status>
+                <midino>0x14</midino>
+                <minimum>0.5</minimum>
+            </output>
+            <output>
+                <group>[Channel2]</group>
+                <key>sync_enabled</key>
+                <description>SYNC LED CH2</description>
+                <status>0x91</status>
+                <midino>0x58</midino>
+                <minimum>0.5</minimum>
+            </output>
+        </outputs>
+    </controller>
+</MixxxControllerPreset>

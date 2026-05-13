@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "LanguageManager.h"
 #include <functional>
 #include <algorithm>
 #include "VstControlWidget.h"
@@ -10,6 +11,7 @@ class AudioCore; // Forward declaration
 class HeaderComponent : public juce::Component,
                         public juce::DragAndDropTarget,
                         public juce::FileDragAndDropTarget,
+                        public juce::ChangeListener,
                         public juce::Timer
 {
 public:
@@ -18,6 +20,8 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
     void timerCallback() override;
 
     // Callbacks to MainComponent
@@ -127,6 +131,7 @@ private:
     // Loop
     juce::TextButton autoLoopBtn { "AUTO LOOP" };
     juce::TextButton loopInBtn { "IN" }, loopOutBtn { "OUT" };
+    juce::TextButton loopMinusBtn { "<" }, loopPlusBtn { ">" };
     juce::Label loopLabel { {}, "LOOP" }, loopSizeLabel { {}, "4 BEATS" };
     int currentLoopBeats = 4;
     double currentBpm = 120.0;
@@ -159,6 +164,7 @@ private:
     juce::Label recordDuration { {}, "00:00:00" };
     bool isRecording = false;
     juce::uint32 recordStartTime = 0;
+    double loopInPoint = 0.0;
 
     AudioCore& audioCore;
 

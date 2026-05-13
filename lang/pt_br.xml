@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<language name="Português Brasileiro">
+    <!-- Main Tabs / Navigation -->
+    <entry key="TAB_CONTROLLERS" value="Controladores"/>
+    <entry key="TAB_SETTINGS" value="Configurações"/>
+    <entry key="TAB_LANGUAGES" value="Idiomas"/>
+    <entry key="BTN_ADD_CONTROLLER" value="Adicionar Controlador"/>
+    <entry key="LINK_SUPPORT" value="Suporte Técnico"/>
+    <entry key="LINK_FIRMWARE" value="Atualizar Firmware"/>
+    
+    <!-- Hardware Manager -->
+    <entry key="HW_MANAGER_SUBTITLE" value="GERENCIAMENTO DE HARDWARE PROFISSIONAL"/>
+    <entry key="HW_MANAGER_SECTION" value="CONFIGURAÇÃO DE SISTEMA"/>
+    <entry key="SEARCH_DEVICES" value="Buscar dispositivos..."/>
+    <entry key="COL_NAME" value="NOME"/>
+    <entry key="COL_MODEL" value="MODELO"/>
+    <entry key="COL_VERSION" value="VERSÃO"/>
+    <entry key="COL_ACTIONS" value="AÇÕES"/>
+    <entry key="BTN_ACTIVATE" value="ATIVAR"/>
+    <entry key="DEV_SECTION_MSG" value="Esta seção está em desenvolvimento para futuras atualizações."/>
+    <entry key="FILE_CHOOSER_TITLE" value="Selecione o arquivo de mapeamento (.midi.xml)"/>
+
+    <!-- Mixer / Decks -->
+    <entry key="MIXER_DRAG_TRACK" value="ARRASTE UMA FAIXA AQUI"/>
+    <entry key="MIXER_MASTER" value="MASTER"/>
+    <entry key="MIXER_SLAVE" value="SLAVE"/>
+    <entry key="MIXER_PLAY" value="PLAY"/>
+    <entry key="MIXER_PAUSE" value="PAUSE"/>
+    <entry key="MIXER_STOP" value="STOP"/>
+    <entry key="MIXER_CUE" value="CUE"/>
+    <entry key="MIXER_SYNC" value="SYNC"/>
+    <entry key="MIXER_REV" value="REV"/>
+    
+    <!-- Loop Controls -->
+    <entry key="LOOP_TITLE" value="LOOP"/>
+    <entry key="LOOP_IN" value="IN"/>
+    <entry key="LOOP_OUT" value="OUT"/>
+    <entry key="LOOP_AUTO" value="AUTO"/>
+    <entry key="LOOP_BEAT" value="BEAT"/>
+    <entry key="LOOP_BEATS" value="BEATS"/>
+    
+    <!-- Filters / FX -->
+    <entry key="FILTER_TITLE" value="FILTRO TÁTIL"/>
+    <entry key="FILTER_LP_FLANGER" value="LP + FLANGER"/>
+    <entry key="FILTER_HP_ECHO" value="HP + ECHO"/>
+    <entry key="FILTER_LP_RES" value="LP + RES"/>
+    <entry key="FILTER_HP_RES" value="HP + RES"/>
+    <entry key="FILTER_CUTOFF" value="CUTOFF"/>
+    <entry key="FILTER_RESONANCE" value="RESSONÂNCIA"/>
+    
+    <!-- Mic / VST -->
+    <entry key="MIC_LABEL" value="MIC"/>
+    <entry key="VST_LABEL" value="VST FX"/>
+    
+    <!-- Hand-Free / Header -->
+    <entry key="HF_MUSIC_BROWSER" value="NAVEGADOR DE MÚSICA"/>
+    <entry key="HF_PITCH" value="PITCH"/>
+    <entry key="HF_RESET" value="RESETAR"/>
+    <entry key="HF_QUANT" value="QUANT"/>
+    <entry key="HF_REC" value="GRAVAR"/>
+    <entry key="HF_ANALYZING" value="ANALISANDO..."/>
+    <entry key="HF_READY" value="PRONTO: "/>
+    <entry key="HF_PLAYING" value="TOCANDO: "/>
+    <entry key="HF_NO_TRACK" value="SEM FAIXA"/>
+    
+    <!-- Stems -->
+    <entry key="STEM_VOCAL" value="VOZ"/>
+    <entry key="STEM_DRUMS" value="BATERIA"/>
+    <entry key="STEM_BASS" value="BAIXO"/>
+    
+    <!-- FX Rack -->
+    <entry key="FX_ULTRA_MULTI" value="ULTRA MULTI-FX"/>
+    <entry key="FX_SAVE_SESSION" value="SALVAR SESSÃO"/>
+    <entry key="FX_LOAD" value="CARREGAR"/>
+    <entry key="FX_DELETE" value="EXCLUIR"/>
+    <entry key="FX_REMOVE" value="REMOVER EFEITO"/>
+    <entry key="FX_SESSION_NAME" value="NOME DA SESSÃO:"/>
+    <entry key="FX_INPUT_MODE" value="MODO DE ENTRADA"/>
+    <entry key="FX_SERIAL_PORT" value="PORTA SERIAL (115200)"/>
+    <entry key="FX_LEARN" value="APRENDER"/>
+    
+    <!-- Footer -->
+    <entry key="FOOTER_MASTER_BPM" value="BPM MASTER"/>
+
+    <!-- Menu Bar -->
+    <entry key="MENU_GENERAL" value="Geral"/>
+    <entry key="MENU_SETTINGS" value="Configurações"/>
+    <entry key="MENU_LAYOUT" value="Layout"/>
+    <entry key="MENU_PLUGINS" value="Plugins"/>
+    <entry key="MENU_HELP" value="Ajuda"/>
+    <entry key="MENU_MANAGE_HARDWARE" value="Gerenciar Hardware..."/>
+    <entry key="MENU_RELOAD_MAPPING" value="Recarregar Mapeamento Atual"/>
+    <entry key="MENU_DJ_HAND_FREE" value="DJ Hand Free"/>
+    <entry key="MENU_DJ_MIXER" value="DJ Mixer"/>
+    <entry key="MENU_RESCAN_PLUGINS" value="Rescan All"/>
+    <entry key="MENU_CONTROLLER_SANDBOX" value="Controller Sandbox (Dev)"/>
+    <entry key="MENU_ABOUT" value="Sobre"/>
+    <entry key="MENU_LICENSE" value="Licença e Uso"/>
+    <entry key="MENU_DONATE" value="❤️ Doar / Apoiar"/>
+
+    <!-- Command Descriptions -->
+    <entry key="DESC_NAV_FX" value="Navegar para aba de FX"/>
+    <entry key="DESC_NAV_FX_TOUCH" value="Navegar para aba de FX Touch"/>
+    <entry key="DESC_NAV_RGB" value="Navegar para aba de RGB"/>
+    <entry key="DESC_NAV_LEARN" value="Navegar para aba de MIDI Learn"/>
+    <entry key="DESC_NAV_SERIAL" value="Navegar para aba de Serial"/>
+    <entry key="DESC_NAV_CONFIG" value="Navegar para aba de Configurações"/>
+
+    <entry key="ACTIVE_STATUS" value="Ativo"/>
+
+    <!-- About / License / Donate / Exit -->
+    <entry key="ABOUT_TITLE" value="Sobre"/>
+    <entry key="ABOUT_MSG" value="Tridjs Live Suite&#10;&#10;Versão: Beta 1.0&#10;Autor: DJ Exder (Coletivo TriDJS)&#10;Segurança da Informação: DJ Christian Mauro"/>
+    <entry key="LICENSE_TITLE" value="Licença e Uso"/>
+    <entry key="LICENSE_MSG" value="Uso: Software gratuito para uso pessoal e profissional.&#10;&#10;Proibição: É estritamente proibida a venda deste software.&#10;&#10;Modificações (GitHub): Em caso de modificação do código-fonte disponível no GitHub, é obrigatório manter e dar os devidos créditos ao desenvolvedor original (DJ Exder) e ao Coletivo TriDJS.&#10;&#10;Direitos: Direitos reservados ao Coletivo TriDJS (Marca Registrada)."/>
+    <entry key="DONATE_TITLE" value="Apoie o Movimento TriDJS"/>
+    <entry key="DONATE_MSG" value="&quot;Fortaleça a Revolução DJ Hand Free!&quot;&#10;&#10;O Tridjs Live Suite nasceu com a missão de quebrar as barreiras entre o artista e a tecnologia. Nosso objetivo é fomentar a cultura da música eletrônica, oferecendo ferramentas autorais que permitem uma performance única e expressiva.&#10;&#10;Ao apoiar este projeto, você ajuda o Coletivo TriDJs a manter o software gratuito para todos, a investir em novos sensores para a tecnologia de gestos e a fortalecer a cena musical no Brasil e no mundo.&#10;&#10;Sua doação é um investimento na liberdade criativa.&#10;&#10;AVISO DE SEGURANÇA: Por segurança, todas as contribuições são processadas exclusivamente através do nosso site oficial."/>
+    <entry key="BTN_OK" value="OK"/>
+    <entry key="BTN_VISIT_SITE" value="Visitar Site"/>
+    <entry key="BTN_MAYBE_LATER" value="Talvez Depois"/>
+    <entry key="BTN_BE_PART" value="Fazer parte dessa história (Site Seguro)"/>
+    <entry key="EXIT_SAVE_QUESTION" value="Deseja salvar o estado atual da sessão?"/>
+    <entry key="EXIT_YES" value="Sim"/>
+    <entry key="EXIT_NO" value="Não"/>
+    
+</language>

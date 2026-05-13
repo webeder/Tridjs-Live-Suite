@@ -1,4 +1,5 @@
 #include "StemsComponent.h"
+#include "LanguageManager.h"
 
 StemsComponent::StemsComponent()
 {
@@ -34,6 +35,27 @@ StemsComponent::StemsComponent()
         if (onStemMuteChanged) onStemMuteChanged(2, muted);
     };
     addAndMakeVisible(bassBtn);
+
+    LanguageManager::getInstance().addChangeListener(this);
+    updateLanguage();
+}
+
+StemsComponent::~StemsComponent()
+{
+    LanguageManager::getInstance().removeChangeListener(this);
+}
+
+void StemsComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    updateLanguage();
+}
+
+void StemsComponent::updateLanguage()
+{
+    vocalBtn.setButtonText(TJS_L("STEM_VOCAL"));
+    drumsBtn.setButtonText(TJS_L("STEM_DRUMS"));
+    bassBtn.setButtonText(TJS_L("STEM_BASS"));
+    repaint();
 }
 
 void StemsComponent::paint(juce::Graphics& g)

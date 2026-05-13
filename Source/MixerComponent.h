@@ -3,6 +3,7 @@
 #include "AudioCore.h"
 #include "TrackBrowserComponent.h"
 #include "VstControlWidget.h"
+#include "LanguageManager.h"
 
 // --- Helper Components ---
 
@@ -13,6 +14,7 @@ class SimpleWaveform : public juce::Component,
 public:
     SimpleWaveform(AudioCore& ac, int idx) : audioCore(ac), deckIdx(idx) {
         audioCore.getThumbnail(deckIdx).addChangeListener(this);
+        LanguageManager::getInstance().addChangeListener(this);
         addAndMakeVisible(zoomInBtn);
         addAndMakeVisible(zoomOutBtn);
         zoomInBtn.setButtonText("+"); zoomOutBtn.setButtonText("-");
@@ -29,7 +31,10 @@ public:
         setOpaque(true);
         startTimer(16); // ~60 FPS
     }
-    ~SimpleWaveform() override { audioCore.getThumbnail(deckIdx).removeChangeListener(this); }
+    ~SimpleWaveform() override { 
+        audioCore.getThumbnail(deckIdx).removeChangeListener(this);
+        LanguageManager::getInstance().removeChangeListener(this);
+    }
     
     bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
     void filesDropped(const juce::StringArray& files, int, int) override {
@@ -160,10 +165,13 @@ public:
             g.setColour(juce::Colours::grey.withAlpha(0.2f));
             g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
             g.setFont(14.0f);
-            g.drawText("DRAG TRACK HERE", area, juce::Justification::centred);
+            g.drawText(TJS_L("MIXER_DRAG_TRACK"), area, juce::Justification::centred);
         }
     }
-    void changeListenerCallback(juce::ChangeBroadcaster*) override { juce::MessageManager::callAsync([this] { repaint(); }); }
+    void changeListenerCallback(juce::ChangeBroadcaster* b) override { 
+        if (b == &LanguageManager::getInstance()) repaint();
+        else juce::MessageManager::callAsync([this] { repaint(); }); 
+    }
     void timerCallback() override { repaint(); }
     
     void resized() override {
@@ -200,7 +208,9 @@ private:
     int deckIdx;
 };
 
-class MicControlWidget : public juce::Component, private juce::Timer {
+class MicControlWidget : public juce::Component, 
+                         public juce::ChangeListener,
+                         private juce::Timer {
 public:
     struct MicLF : public juce::LookAndFeel_V4 {
         juce::Font getTextButtonFont(juce::TextButton&, int) override {
@@ -240,7 +250,7 @@ public:
     MicLF micLF;
 
     MicControlWidget(AudioCore& ac) : audioCore(ac) {
-        micBtn.setButtonText("MIC");
+        micBtn.setButtonText(TJS_L("MIC_LABEL"));
         micBtn.setClickingTogglesState(true);
         micBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
         micBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
@@ -258,12 +268,22 @@ public:
         micKnob.onValueChange = [this] { audioCore.setMicVolume((float)micKnob.getValue()); };
         addAndMakeVisible(micKnob);
 
+        LanguageManager::getInstance().addChangeListener(this);
+        updateLanguage();
         startTimer(30);
     }
 
     ~MicControlWidget() override {
         micBtn.setLookAndFeel(nullptr);
         micKnob.setLookAndFeel(nullptr);
+        LanguageManager::getInstance().removeChangeListener(this);
+    }
+
+    void changeListenerCallback(juce::ChangeBroadcaster*) override { updateLanguage(); }
+
+    void updateLanguage() {
+        micBtn.setButtonText(TJS_L("MIC_LABEL"));
+        repaint();
     }
 
     void paint(juce::Graphics& g) override {
@@ -348,15 +368,25 @@ private:
 class LoopControlGroup : public juce::Component {
 public:
     LoopControlGroup(juce::Colour accent) : accentColour(accent) {
-        addAndMakeVisible(title); title.setText("LOOP", juce::dontSendNotification);
+        addAndMakeVisible(title); title.setText(TJS_L("LOOP_TITLE"), juce::dontSendNotification);
         title.setFont(juce::Font(10.0f, juce::Font::bold));
         addAndMakeVisible(beats); beats.setText("4 BEATS", juce::dontSendNotification);
         beats.setFont(juce::Font(9.0f, juce::Font::bold)); beats.setColour(juce::Label::textColourId, accentColour);
-        setupBtn(inBtn, "IN"); setupBtn(outBtn, "OUT"); setupBtn(autoBtn, "AUTO LOOP");
+        setupBtn(inBtn, TJS_L("LOOP_IN")); setupBtn(outBtn, TJS_L("LOOP_OUT")); setupBtn(autoBtn, TJS_L("LOOP_AUTO"));
         
         inBtn.onClick = [this] { if (onInPressed) onInPressed(); };
         outBtn.onClick = [this] { if (onOutPressed) onOutPressed(); };
         autoBtn.onClick = [this] { if (onAutoPressed) onAutoPressed(); };
+        updateLanguage();
+    }
+
+    void updateLanguage() {
+        title.setText(TJS_L("LOOP_TITLE"), juce::dontSendNotification);
+        title.setMinimumHorizontalScale(0.8f);
+        inBtn.setButtonText(TJS_L("LOOP_IN"));
+        outBtn.setButtonText(TJS_L("LOOP_OUT"));
+        autoBtn.setButtonText(TJS_L("LOOP_AUTO"));
+        repaint();
     }
     void setupBtn(juce::TextButton& b, const juce::String& t) {
         addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff111111));
@@ -376,9 +406,10 @@ public:
     void setBeats(double b) { 
         if (b < 1.0) {
             int denom = (int)(1.0 / b + 0.5);
-            beats.setText("1/" + juce::String(denom) + " BEAT", juce::dontSendNotification);
+            beats.setText("1/" + juce::String(denom) + " " + TJS_L("LOOP_BEAT"), juce::dontSendNotification);
         } else {
-            beats.setText(juce::String((int)b) + " BEATS", juce::dontSendNotification);
+            juce::String suffix = (b > 1.0 ? TJS_L("LOOP_BEATS") : TJS_L("LOOP_BEAT"));
+            beats.setText(juce::String((int)b) + " " + suffix, juce::dontSendNotification);
         }
     }
     std::function<void()> onInPressed;
@@ -390,7 +421,8 @@ private:
     juce::Colour accentColour; juce::Label title, beats; 
 };
 
-class DeckSection : public juce::Component, private juce::Timer {
+class DeckSection : public juce::Component, 
+                    private juce::Timer {
 public:
     DeckSection(AudioCore& ac, int idx, bool isLeft) 
         : audioCore(ac), deckIdx(idx), leftSide(isLeft), jog(ac, idx, isLeft ? juce::Colours::cyan : juce::Colours::tomato, isLeft),
@@ -467,18 +499,55 @@ public:
         };
 
         loopControls.onInPressed = [this, updateLoopWithCurrentBeats] {
-            // IN = Shrink loop (halve beats)
-            if (currentBeatIdx > 0) {
-                currentBeatIdx--;
-                updateLoopWithCurrentBeats(audioEngine.isDeckLoopEnabled(deckIdx));
+            if (!audioCore.isDeckLoopEnabled(deckIdx)) {
+                // Manual IN: Set start point
+                loopInPoint = audioCore.getDeckPosition(deckIdx);
+            } else {
+                // Loop active: Half loop
+                if (currentBeatIdx > 0) {
+                    currentBeatIdx--;
+                    updateLoopWithCurrentBeats(true);
+                }
             }
         };
 
         loopControls.onOutPressed = [this, updateLoopWithCurrentBeats] {
-            // OUT = Grow loop (double beats)
-            if (currentBeatIdx < 10) {
-                currentBeatIdx++;
-                updateLoopWithCurrentBeats(audioEngine.isDeckLoopEnabled(deckIdx));
+            if (!audioCore.isDeckLoopEnabled(deckIdx)) {
+                // Manual OUT: Set end point and activate
+                double currentPos = audioCore.getDeckPosition(deckIdx);
+                if (currentPos > loopInPoint + 0.1) {
+                    double duration = currentPos - loopInPoint;
+                    audioCore.setDeckLoopRange(deckIdx, loopInPoint, duration);
+                    audioCore.setDeckLoopEnabled(deckIdx, true);
+                    
+                    // Update currentBeatIdx based on the manual duration
+                    double bpm = audioCore.getDeckBpm(deckIdx);
+                    if (bpm > 0) {
+                        double beatLen = 60.0 / bpm;
+                        double numBeats = duration / beatLen;
+                        // Approximate to closest power of 2
+                        currentBeatIdx = 5; // Start search at 1 beat
+                        if (numBeats >= 32) currentBeatIdx = 10;
+                        else if (numBeats >= 16) currentBeatIdx = 9;
+                        else if (numBeats >= 8) currentBeatIdx = 8;
+                        else if (numBeats >= 4) currentBeatIdx = 7;
+                        else if (numBeats >= 2) currentBeatIdx = 6;
+                        else if (numBeats >= 1) currentBeatIdx = 5;
+                        else if (numBeats >= 0.5) currentBeatIdx = 4;
+                        else if (numBeats >= 0.25) currentBeatIdx = 3;
+                        else if (numBeats >= 0.125) currentBeatIdx = 2;
+                        else if (numBeats >= 0.0625) currentBeatIdx = 1;
+                        else currentBeatIdx = 0;
+                        
+                        loopControls.setBeats(numBeats);
+                    }
+                }
+            } else {
+                // Loop active: Double loop
+                if (currentBeatIdx < 10) {
+                    currentBeatIdx++;
+                    updateLoopWithCurrentBeats(true);
+                }
             }
         };
 
@@ -496,7 +565,21 @@ public:
         startTimer(16);
     }
 
-    void setupButton(juce::TextButton& b, const juce::String& t, juce::Colour c) { addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, c); }
+    void setupButton(juce::TextButton& b, const juce::String& t, juce::Colour c) { 
+        addAndMakeVisible(b); b.setButtonText(t); b.setColour(juce::TextButton::buttonColourId, c); 
+    }
+    
+    void updateLanguage() {
+        playBtn.setButtonText(audioCore.isDeckPlaying(deckIdx) ? TJS_L("MIXER_PAUSE") : TJS_L("MIXER_PLAY"));
+        syncBtn.setButtonText(TJS_L("MIXER_SYNC"));
+        revBtn.setButtonText(TJS_L("MIXER_REV"));
+        cueBtn.setButtonText(TJS_L("MIXER_CUE"));
+        bool isMaster = (audioCore.getMasterDeck() == deckIdx);
+        badge.setButtonText(isMaster ? TJS_L("MIXER_MASTER") : TJS_L("MIXER_SLAVE"));
+        loopControls.updateLanguage();
+        repaint();
+    }
+
     void paint(juce::Graphics& g) override { g.setColour(juce::Colour(0xff151515)); g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f); }
     void resized() override {
         auto area = getLocalBounds().reduced(15); auto header = area.removeFromTop(40);
@@ -526,11 +609,12 @@ public:
         bpmLabel.setText(juce::String(audioCore.getDeckBpm(deckIdx), 1), juce::dontSendNotification);
         deckLabel.setText(audioCore.getDeckName(deckIdx).isEmpty() ? (deckIdx == 0 ? "DECK A" : "DECK B") : audioCore.getDeckName(deckIdx), juce::dontSendNotification);
         bool isMaster = (audioCore.getMasterDeck() == deckIdx);
-        badge.setButtonText(isMaster ? "MASTER" : "SLAVE");
+        badge.setButtonText(isMaster ? TJS_L("MIXER_MASTER") : TJS_L("MIXER_SLAVE"));
         badge.setColour(juce::TextButton::buttonColourId, isMaster ? juce::Colours::blue : juce::Colours::white);
         badge.setColour(juce::TextButton::textColourOffId, isMaster ? juce::Colours::white : juce::Colours::black);
         badge.setColour(juce::TextButton::textColourOnId, isMaster ? juce::Colours::white : juce::Colours::black);
-        bool playing = audioCore.isDeckPlaying(deckIdx); playBtn.setButtonText(playing ? "PAUSE" : "PLAY");
+        bool playing = audioCore.isDeckPlaying(deckIdx);
+        playBtn.setButtonText(playing ? TJS_L("MIXER_PAUSE") : TJS_L("MIXER_PLAY"));
         playBtn.setColour(juce::TextButton::buttonColourId, playing ? juce::Colours::green : (leftSide ? juce::Colours::blue : juce::Colours::red));
         
         bool isLooping = audioCore.isDeckLoopEnabled(deckIdx);
@@ -611,6 +695,13 @@ public:
         crossfader.setValue(audioCore.getCrossfaderPosition(), juce::dontSendNotification);
     }
 
+    void updateLanguage() {
+        fxA.updateLanguage();
+        fxB.updateLanguage();
+        micControl.updateLanguage();
+        repaint();
+    }
+
     ~MixerCenterSection() override { setLookAndFeel(nullptr); }
 
     struct SimpleXY : public juce::Component {
@@ -631,7 +722,7 @@ public:
             g.fillRoundedRectangle(headerArea.withSizeKeepingCentre(160, 24).toFloat(), 12.0f);
             g.setColour(juce::Colours::white.withAlpha(0.7f));
             g.setFont(juce::Font(12.0f, juce::Font::bold));
-            g.drawText("DJ FILTER", headerArea, juce::Justification::centred);
+            g.drawText(TJS_L("FILTER_TITLE"), headerArea, juce::Justification::centred);
 
             int cx = area.getX() + area.getWidth()  / 2;
             int cy = area.getY() + area.getHeight() / 2;
@@ -661,13 +752,13 @@ public:
             // 6. Quadrant labels (corners)
             g.setFont(juce::Font(9.0f, juce::Font::bold));
             g.setColour(juce::Colours::lime.withAlpha(0.5f));
-            g.drawText("LP+FLANGER", tl.reduced(4, 2), juce::Justification::topLeft);
+            g.drawText(TJS_L("FILTER_LP_FLANGER"), tl.reduced(4, 2), juce::Justification::topLeft);
             g.setColour(juce::Colours::cyan.withAlpha(0.5f));
-            g.drawText("HP+ECHO", tr.reduced(4, 2), juce::Justification::topRight);
+            g.drawText(TJS_L("FILTER_HP_ECHO"), tr.reduced(4, 2), juce::Justification::topRight);
             g.setColour(juce::Colour(0xffaa88ff).withAlpha(0.5f));
-            g.drawText("LP+RESONANCE", bl.reduced(4, 2), juce::Justification::bottomLeft);
+            g.drawText(TJS_L("FILTER_LP_RES"), bl.reduced(4, 2), juce::Justification::bottomLeft);
             g.setColour(juce::Colour(0xffff88aa).withAlpha(0.5f));
-            g.drawText("HP+RESONANCE", br.reduced(4, 2), juce::Justification::bottomRight);
+            g.drawText(TJS_L("FILTER_HP_RES"), br.reduced(4, 2), juce::Justification::bottomRight);
 
             // 7. Glowing ball indicator
             float px = curX * area.getWidth()  + area.getX();
@@ -1042,6 +1133,9 @@ private:
             xyPad.setVisible(false);
         }
 
+        void updateLanguage() {
+            repaint(); // FX slot names are hardcoded; repaint in case TJS_L strings are painted
+        }
         void paint(juce::Graphics& g) override {
             auto area = getLocalBounds();
             g.setColour(juce::Colour(0xff1a1a1a));
@@ -1184,41 +1278,58 @@ public:
 
 };
 
-class MixerComponent : public juce::Component, 
+class MixerComponent : public juce::Component,
                       public juce::FileDragAndDropTarget,
-                      public juce::DragAndDropTarget,
-                      private juce::Timer {
+                      public juce::DragAndDropTarget
+{
 public:
-    MixerComponent(AudioCore& ac, TrackBrowserComponent* b) 
-        : audioCore(ac), browser(b), waveA(ac, 0), waveB(ac, 1), deckA(ac, 0, true), deckB(ac, 1, false), mixer(ac) {
-        addAndMakeVisible(waveA); addAndMakeVisible(waveB); addAndMakeVisible(deckA); addAndMakeVisible(deckB); addAndMakeVisible(mixer);
-        startTimer(30); // Para Sync e outras lógicas de UI
+    MixerComponent(AudioCore& ac, TrackBrowserComponent* b)
+        : audioCore(ac), browser(b),
+          waveA(ac, 0), waveB(ac, 1),
+          deckA(ac, 0, true), deckB(ac, 1, false),
+          mixer(ac),
+          langListener(*this),
+          syncTimer(*this)
+    {
+        addAndMakeVisible(waveA);
+        addAndMakeVisible(waveB);
+        addAndMakeVisible(deckA);
+        addAndMakeVisible(deckB);
+        addAndMakeVisible(mixer);
+
+        LanguageManager::getInstance().addChangeListener(&langListener);
+        syncTimer.startTimer(30);
     }
-    
-    void timerCallback() override {
-        // Mover a lógica de Sync para cá para evitar travamentos na thread de áudio
-        audioCore.handleSyncLogic();
+
+    ~MixerComponent() override {
+        LanguageManager::getInstance().removeChangeListener(&langListener);
+        syncTimer.stopTimer();
     }
-    
+
+    void updateLanguage() {
+        deckA.updateLanguage();
+        deckB.updateLanguage();
+        mixer.updateLanguage();
+        repaint();
+    }
+
     // External File Drag (Explorer)
     bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
     void filesDropped(const juce::StringArray& files, int x, int) override {
-        if (files.size() > 0) { 
-            if (x < getWidth() / 2) audioCore.loadDeckA(juce::File(files[0])); 
-            else audioCore.loadDeckB(juce::File(files[0])); 
+        if (files.size() > 0) {
+            if (x < getWidth() / 2) audioCore.loadDeckA(juce::File(files[0]));
+            else audioCore.loadDeckB(juce::File(files[0]));
         }
     }
 
     // Internal Drag (Track Browser Grid)
     bool isInterestedInDragSource(const SourceDetails& details) override {
-        // TrackBrowserComponent returns pipe-separated paths as a string
         juce::String desc = details.description.toString();
         if (desc.contains("|")) return true;
         return juce::File::isAbsolutePath(desc);
     }
     void itemDropped(const SourceDetails& details) override {
         juce::String desc = details.description.toString();
-        // Extract first path from pipe-separated string
         juce::String firstPath = desc.contains("|")
             ? desc.upToFirstOccurrenceOf("|", false, false).trim()
             : desc.trim();
@@ -1229,17 +1340,13 @@ public:
         }
     }
 
-
     void paintOverChildren(juce::Graphics& g) override {
         auto area = getLocalBounds();
         auto h = getHeight();
-        auto waveAreaHeight = (int)(h * 0.18f); 
-        
+        auto waveAreaHeight = (int)(h * 0.18f);
         float centerX = area.getWidth() / 2.0f;
-        
         g.setColour(juce::Colours::white.withAlpha(0.85f));
         g.fillRect(centerX - 1.5f, 0.0f, 3.0f, (float)waveAreaHeight);
-        
         g.setColour(juce::Colours::white.withAlpha(0.2f));
         g.fillRect(centerX - 2.5f, 0.0f, 5.0f, (float)waveAreaHeight);
     }
@@ -1250,7 +1357,6 @@ public:
         auto w = area.getWidth();
         auto h = area.getHeight();
 
-        // 1. Browser (Bottom 35%) - Fills width
         auto browserArea = area.removeFromBottom((int)(h * 0.35f));
         if (browser != nullptr) {
             browser->setTransform(juce::AffineTransform());
@@ -1258,34 +1364,53 @@ public:
             browser->setVisible(true);
         }
 
-        // 2. Waveforms (Top 18%) - Fills width intelligently
         auto waveArea = area.removeFromTop((int)(h * 0.18f));
         waveA.setTransform(juce::AffineTransform());
         waveB.setTransform(juce::AffineTransform());
-        waveA.setBounds(waveArea.removeFromTop(waveArea.getHeight() / 2).reduced(2)); 
+        waveA.setBounds(waveArea.removeFromTop(waveArea.getHeight() / 2).reduced(2));
         waveB.setBounds(waveArea.reduced(2));
 
-        // 3. Middle Section: [ Deck A ] [ Mixer ] [ Deck B ]
         area.reduce(10, 5);
         auto middleRow = area;
-        int centerW = (int)(w * 0.35f); 
-        int sideW = (w - centerW) / 2;
-        
+        int centerW = (int)(w * 0.35f);
+        int sideW    = (w - centerW) / 2;
+
         deckA.setVisible(true);
         deckB.setVisible(true);
-        
         deckA.setTransform(juce::AffineTransform());
         deckB.setTransform(juce::AffineTransform());
         mixer.setTransform(juce::AffineTransform());
-
         deckA.setBounds(middleRow.removeFromLeft(sideW).reduced(2));
         mixer.setBounds(middleRow.removeFromLeft(centerW).reduced(2));
         deckB.setBounds(middleRow.reduced(2));
     }
+
 public:
-    DeckSection deckA, deckB; MixerCenterSection mixer;
+    DeckSection        deckA, deckB;
+    MixerCenterSection mixer;
 
 private:
-    AudioCore& audioCore; TrackBrowserComponent* browser; SimpleWaveform waveA, waveB;
+    AudioCore&             audioCore;
+    TrackBrowserComponent* browser;
+    SimpleWaveform         waveA, waveB;
+
+    // Nested ChangeListener — avoids private-inheritance ambiguity on juce::Component
+    struct LangChangeListener : public juce::ChangeListener {
+        MixerComponent& owner;
+        explicit LangChangeListener(MixerComponent& o) : owner(o) {}
+        void changeListenerCallback(juce::ChangeBroadcaster*) override {
+            owner.updateLanguage();
+        }
+    } langListener;
+
+    // Nested Timer — avoids private-inheritance ambiguity on juce::Component
+    struct SyncTimer : public juce::Timer {
+        MixerComponent& owner;
+        explicit SyncTimer(MixerComponent& o) : owner(o) {}
+        void timerCallback() override {
+            owner.audioCore.handleSyncLogic();
+        }
+    } syncTimer;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerComponent)
 };

@@ -195,6 +195,14 @@ add_custom_command(TARGET TridjsLiveSuite POST_BUILD
     $<TARGET_FILE_DIR:TridjsLiveSuite>
 )
 
+# Copiar pasta lang/ (traduções XML) para ao lado do executável após a build
+add_custom_command(TARGET TridjsLiveSuite POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/lang"
+    "$<TARGET_FILE_DIR:TridjsLiveSuite>/lang"
+    COMMENT "Copying lang/ translations to output directory"
+)
+
 # Adicionar fontes do STK diretamente se necessário ou via target
 target_compile_definitions(TridjsLiveSuite PRIVATE __WINDOWS_ASIO__ __WINDOWS_DS__)
 

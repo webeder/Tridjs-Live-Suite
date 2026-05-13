@@ -1006,6 +1006,11 @@ void AudioCore::CrossfadingLoopSource::getNextAudioBlock(const juce::AudioSource
     juce::int64 end = (looping && loopLength > 0) ? (loopStart + loopLength) : totalLen;
     end = juce::jmin(end, totalLen);
 
+    // SAFETY: Prevent infinite loop if loop length is too small
+    if (looping && (end - start) < (crossfadeSamples + 2)) {
+        looping = false; 
+    }
+
     if (!looping || (end - start) <= crossfadeSamples * 2) {
         readerSource->getNextAudioBlock(bufferToFill);
         if (looping && readerSource->getNextReadPosition() >= end)

@@ -1,4 +1,5 @@
 #include "HandFreeComponent.h"
+#include "LanguageManager.h"
 
 HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, 
                                    juce::AudioDeviceManager& deviceManager, TrackBrowserComponent* browser)
@@ -11,6 +12,15 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
 {
     if (browserPtr)
         bottomPanel.setContent(browserPtr);
+    
+    // Header Callbacks
+    header.onPlay = [this] { audioEngine.playMainTrack(); };
+    header.onStop = [this] { audioEngine.stopMainTrack(); };
+    header.onEject = [this] { audioEngine.ejectMainTrack(); };
+    header.onSeek = [this](double pos) { audioEngine.seekMainTrack(pos); };
+    header.onLoopSet = [this](double start, double dur) { audioEngine.setMainTrackLoopRange(start, dur); };
+    header.onLoopEnabled = [this](bool active) { audioEngine.setMainTrackLoopEnabled(active); };
+    header.onFileDropped = [this](const juce::File& f) { audioEngine.loadMainTrack(f); };
     
     // 1. Setup the callbacks first
     stems.onStemMuteChanged = [this](int idx, bool muted) {
@@ -109,12 +119,26 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
         startTimerHz(60); // Start animation timer
     };
 
-    // Note: The wiring (callbacks) will be moved here or kept in Main if it depends on Main state.
     // However, the user wants to encapsulate "everything". 
     // I'll put most wiring here, but some might need to be exposed.
+    LanguageManager::getInstance().addChangeListener(this);
+    updateLanguage();
 }
 
-HandFreeComponent::~HandFreeComponent() {}
+HandFreeComponent::~HandFreeComponent() {
+    LanguageManager::getInstance().removeChangeListener(this);
+}
+
+void HandFreeComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    updateLanguage();
+}
+
+void HandFreeComponent::updateLanguage()
+{
+    pitchLabel.setText(TJS_L("HF_PITCH"), juce::dontSendNotification);
+    repaint();
+}
 
 void HandFreeComponent::paint(juce::Graphics& g)
 {

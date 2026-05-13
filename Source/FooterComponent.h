@@ -1,7 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 
-class FooterComponent : public juce::Component, public juce::Timer
+class FooterComponent : public juce::Component, public juce::Timer, public juce::ChangeListener
 {
 public:
     FooterComponent();
@@ -9,6 +9,9 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
     void timerCallback() override;
 
     void setBpm(double newBpm);
@@ -26,7 +29,7 @@ private:
     juce::TextButton btn16x16 { "16x16" };
 
     // BPM Sync Dashboard
-    juce::Label bpmTitleLabel { {}, "MASTER BPM" };
+    juce::Label bpmTitleLabel { {}, "" };
     juce::Label bpmValueLabel { {}, "120.00" };
 
     juce::Image appIcon;

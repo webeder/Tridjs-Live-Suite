@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "LanguageManager.h"
 #include "HeaderComponent.h"
 #include "StemsComponent.h"
 #include "PadsGridComponent.h"
@@ -28,7 +29,7 @@ public:
         g.fillRoundedRectangle(area.getCentreX() - barW/2, 6.0f, barW, barH, 2.0f);
         g.setColour(juce::Colours::white.withAlpha(0.6f));
         g.setFont(12.0f);
-        g.drawText("MUSIC BROWSER", area.withHeight(25), juce::Justification::centred);
+        g.drawText(TJS_L("HF_MUSIC_BROWSER"), area.withHeight(25), juce::Justification::centred);
     }
     void mouseDown(const juce::MouseEvent&) override { if (onClick) onClick(); }
     
@@ -53,7 +54,9 @@ private:
     juce::Component* browserContainer = nullptr;
 };
 
-class HandFreeComponent : public juce::Component, private juce::Timer
+class HandFreeComponent : public juce::Component, 
+                          public juce::ChangeListener,
+                          private juce::Timer
 {
 public:
     HandFreeComponent(AudioCore& engine, InputManager& input, RgbManager& rgb, 
@@ -69,6 +72,9 @@ public:
 
     void setExpanded(bool expanded);
     bool isExpanded() const { return panelExpanded; }
+
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
 
     // Callbacks ou métodos para expor funcionalidades ao MainComponent se necessário
     std::function<void()> onResetPitchRequested;
@@ -89,7 +95,7 @@ public:
     
     // Middle Pitch
     juce::Slider pitchSlider;
-    juce::Label pitchLabel { {}, "PITCH" };
+    juce::Label pitchLabel;
     juce::TextButton pitchValue { "0.0%" };
 private:
     bool panelExpanded = false;

@@ -1,4 +1,5 @@
 #include "HeaderComponent.h"
+#include "LanguageManager.h"
 #include "AudioCore.h"
 
 HeaderComponent::HeaderComponent (AudioCore& engine) 
@@ -11,8 +12,6 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
         if (onSeek) onSeek(posSeconds);
     };
 
-    // Transport Buttons
-    playBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff00ff55));
     playBtn.onClick = [this] {
         if (audioCore.isMainTrackPlaying()) {
             audioCore.stopMainTrack();
@@ -21,19 +20,7 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
         }
     };
     addAndMakeVisible(playBtn);
-
-    ejectButton.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff553333));
-    ejectButton.onClick = [this] {
-        waveformDisplay.loadedTrackName = "";
-        waveformDisplay.currentPos = 0.0;
-        audioCore.setDeckCuePoint(2, 0.0);
-        waveformDisplay.isPlaying = false;
-        waveformDisplay.repaint();
-        if (onEject) onEject();
-    };
-    addAndMakeVisible(ejectButton);
-
-    cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xffffa500));
+    
     cueBtn.onClick = [this] {
         if (audioCore.isMainTrackPlaying()) {
             audioCore.stopMainTrack();
@@ -43,6 +30,9 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
         }
         repaint();
     };
+    cueBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::yellow);
+    cueBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
+    cueBtn.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
     addAndMakeVisible(cueBtn);
 
     // VU Meter
@@ -145,74 +135,99 @@ HeaderComponent::HeaderComponent (AudioCore& engine)
         if (onRecordToggled)
             onRecordToggled(isRecording);
     };
-    addAndMakeVisible (recordButton);
+    addAndMakeVisible(recordButton);
 
-    recordDuration.setColour(juce::Label::textColourId, juce::Colours::white);
-    recordDuration.setFont(juce::Font("Consolas", 18.0f, juce::Font::bold));
+    recordDuration.setColour(juce::Label::backgroundColourId, juce::Colours::black);
+    recordDuration.setColour(juce::Label::outlineColourId, juce::Colours::white.withAlpha(0.2f));
     recordDuration.setJustificationType(juce::Justification::centred);
-    recordDuration.setColour(juce::Label::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
     addAndMakeVisible(recordDuration);
+
+    ejectButton.setTooltip(TJS_L("MIXER_EJECT"));
+    ejectButton.onClick = [this] { if (onEject) onEject(); };
+    addAndMakeVisible(ejectButton);
+
+    // Loop Controls
+    addAndMakeVisible(autoLoopBtn);
+    autoLoopBtn.setClickingTogglesState(true);
+    autoLoopBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::orange);
+    autoLoopBtn.onClick = [this] { applyCurrentLoop(); };
+
+    addAndMakeVisible(loopInBtn);
+    loopInBtn.setVisible(false);
+    loopInBtn.onClick = [this] { 
+        loopInPoint = audioCore.getDeckPosition(2); 
+    };
+
+    addAndMakeVisible(loopOutBtn);
+    loopOutBtn.setVisible(false);
+    loopOutBtn.onClick = [this] {
+        double currentPos = audioCore.getDeckPosition(2);
+        if (currentPos > loopInPoint + 0.1) {
+            double duration = currentPos - loopInPoint;
+            audioCore.setDeckLoopRange(2, loopInPoint, duration);
+            audioCore.setDeckLoopEnabled(2, true);
+            autoLoopBtn.setToggleState(true, juce::dontSendNotification);
+            waveformDisplay.setLoopVisual(loopInPoint, duration, true);
+        }
+    };
+
+    addAndMakeVisible(loopMinusBtn);
+    loopMinusBtn.onClick = [this] {
+        currentLoopBeats = std::max(1, currentLoopBeats / 2);
+        applyCurrentLoop();
+    };
+
+    addAndMakeVisible(loopPlusBtn);
+    loopPlusBtn.onClick = [this] {
+        currentLoopBeats = std::min(32, currentLoopBeats * 2);
+        applyCurrentLoop();
+    };
+
+    addAndMakeVisible(loopLabel);
+    loopLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+    loopLabel.setFont(juce::Font(10.0f, juce::Font::bold));
+
+    addAndMakeVisible(loopSizeLabel);
+    loopSizeLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    loopSizeLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+    loopSizeLabel.setJustificationType(juce::Justification::centredLeft);
 
     addAndMakeVisible(vstWidget);
 
-    // Loop Setup
-    autoLoopBtn.setClickingTogglesState(true);
-    autoLoopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1a1a1a));
-    autoLoopBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff1a1a1a));
-    autoLoopBtn.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffffa500));
-    autoLoopBtn.setColour(juce::TextButton::textColourOnId, juce::Colour(0xffffa500));
-    autoLoopBtn.onClick = [this] {
-        bool active = autoLoopBtn.getToggleState();
-        if (active) {
-            double duration = (60.0 / currentBpm) * currentLoopBeats;
-            // Get current playhead directly from audioCore to ensure perfectly accurate loop start
-            double start = audioCore.getDeckPosition(2);
-            audioCore.setDeckLoopRange(2, start, duration);
-            waveformDisplay.setLoopVisual(start, duration, true);
-        } else {
-            waveformDisplay.setLoopVisual(0, 0, false);
-        }
-        audioCore.setDeckLoopEnabled(2, active);
-        
-        if (onLoopEnabled) onLoopEnabled(active);
-    };
-    addAndMakeVisible(autoLoopBtn);
-
-    loopLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-    loopLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-    addAndMakeVisible(loopLabel);
-
-    loopSizeLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    loopSizeLabel.setFont(juce::Font(16.0f, juce::Font::bold));
-    loopSizeLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(loopSizeLabel);
-
-    loopInBtn.setButtonText("<");
-    loopInBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1e1e1e));
-    loopInBtn.onClick = [this] {
-        currentLoopBeats = std::max(1, currentLoopBeats / 2);
-        autoLoopBtn.setToggleState(true, juce::dontSendNotification);
-        applyCurrentLoop();
-        if (onLoopEnabled) onLoopEnabled(true);
-    };
-    addAndMakeVisible(loopInBtn);
-
-    loopOutBtn.setButtonText(">");
-    loopOutBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1e1e1e));
-    loopOutBtn.onClick = [this] {
-        currentLoopBeats = std::min(64, currentLoopBeats * 2);
-        autoLoopBtn.setToggleState(true, juce::dontSendNotification);
-        applyCurrentLoop();
-        if (onLoopEnabled) onLoopEnabled(true);
-    };
-    addAndMakeVisible(loopOutBtn);
-
+    LanguageManager::getInstance().addChangeListener(this);
+    updateLanguage();
+    
     startTimer(30);
 }
 
 HeaderComponent::~HeaderComponent()
 {
+    LanguageManager::getInstance().removeChangeListener(this);
     stopTimer();
+}
+
+void HeaderComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    updateLanguage();
+}
+
+void HeaderComponent::updateLanguage()
+{
+    bool playing = audioCore.isMainTrackPlaying();
+    playBtn.setButtonText(playing ? TJS_L("MIXER_STOP") : TJS_L("MIXER_PLAY"));
+    cueBtn.setButtonText(TJS_L("MIXER_CUE"));
+    autoLoopBtn.setButtonText(TJS_L("LOOP_AUTO"));
+    loopInBtn.setButtonText(TJS_L("LOOP_IN"));
+    loopOutBtn.setButtonText(TJS_L("LOOP_OUT"));
+    loopLabel.setText(TJS_L("LOOP_TITLE"), juce::dontSendNotification);
+    masterLabel.setText(TJS_L("MIXER_MASTER"), juce::dontSendNotification);
+    volumeLabel.setText(TJS_L("MIXER_VOL_TRACK"), juce::dontSendNotification);
+    micLabel.setText(TJS_L("MIC_LABEL"), juce::dontSendNotification);
+    quantToggle.setButtonText(TJS_L("HF_QUANT"));
+    recordButton.setButtonText(TJS_L("HF_REC"));
+    
+    waveformDisplay.repaint();
+    repaint();
 }
 
 void HeaderComponent::timerCallback()
@@ -244,7 +259,7 @@ void HeaderComponent::updateTransportInfo (double positionSeconds, double trackL
     
     playBtn.setColour(juce::TextButton::buttonColourId, 
         playing ? juce::Colour((juce::uint32)0xff00ff55) : juce::Colour((juce::uint32)0xff00aa44));
-    playBtn.setButtonText(playing ? "STOP" : "PLAY");
+    playBtn.setButtonText(playing ? TJS_L("MIXER_STOP") : TJS_L("MIXER_PLAY"));
     repaint();
 }
 
@@ -473,7 +488,7 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
     {
         g.setColour(juce::Colours::white.withAlpha(0.5f));
         g.setFont(14.0f);
-        g.drawText("ANALISANDO...", bounds, juce::Justification::centred);
+        g.drawText(TJS_L("HF_ANALYZING"), bounds, juce::Justification::centred);
     }
 
     if (loadedTrackName.isNotEmpty() && !spectralData.empty())
@@ -609,7 +624,8 @@ void HeaderComponent::WaveformDisplay::paint (juce::Graphics& g)
     }
     else {
         // --- Track Name (Visible only when loaded, at the BOTTOM) ---
-        juce::String displayName = isPlaying ? "PLAYING: " + loadedTrackName : "READY: " + loadedTrackName;
+        juce::String status = isPlaying ? TJS_L("HF_PLAYING") : TJS_L("HF_READY");
+        juce::String displayName = status + loadedTrackName;
         g.setFont(juce::Font("Roboto", 18.0f, juce::Font::bold));
         
         int tx = 15;
@@ -670,7 +686,7 @@ void HeaderComponent::paint (juce::Graphics& g)
     // Desenhar o Dot do Record (Horizontal)
     auto recBounds = recordButton.getBounds();
     float dotSize = 12.0f;
-    float dotX = (float)recBounds.getX() - 16.0f;
+    float dotX = (float)recBounds.getX() - 14.0f;
     float dotY = (float)recBounds.getCentreY() - (dotSize / 2.0f);
     
     if (isRecording) {
@@ -724,23 +740,24 @@ void HeaderComponent::resized()
     ejectButton.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
     quantToggle.setBounds(rightBtns.removeFromLeft(60).withSizeKeepingCentre(55, 30));
 
-    // Loop Controls (Compactos e juntos)
-    auto loopArea = bottomArea.removeFromLeft(180); 
+    // Loop Controls (Retro Layout)
+    auto loopArea = bottomArea.removeFromLeft(190); 
     autoLoopBtn.setBounds(loopArea.removeFromLeft(80).reduced(4, 10));
     
-    auto adjArea = loopArea.removeFromLeft(100).reduced(2, 5);
-    auto topAdj = adjArea.removeFromTop(20);
-    loopLabel.setBounds(topAdj.removeFromLeft(35));
-    loopSizeLabel.setBounds(topAdj);
+    auto adjArea = loopArea.reduced(2, 2);
+    auto topRow = adjArea.removeFromTop(adjArea.getHeight() / 2);
+    loopLabel.setBounds(topRow.removeFromLeft(45));
+    loopSizeLabel.setBounds(topRow);
     
-    auto btnRow = adjArea.removeFromTop(25);
-    loopInBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
-    loopOutBtn.setBounds(btnRow.removeFromLeft(40).reduced(1));
+    auto botRow = adjArea;
+    loopMinusBtn.setBounds(botRow.removeFromLeft(45).reduced(8, 2));
+    loopPlusBtn.setBounds(botRow.removeFromLeft(45).reduced(8, 2));
 
-    // Record block (REC + TIME)
-    auto recBlock = bottomArea.removeFromLeft(150).reduced(2, 5);
-    recordButton.setBounds(recBlock.removeFromLeft(60).withTrimmedLeft(10));
-    recordDuration.setBounds(recBlock);
+    // Record block (Retro Layout)
+    bottomArea.removeFromLeft(15);
+    auto recBlock = bottomArea.removeFromLeft(160).reduced(5, 5);
+    recordButton.setBounds(recBlock.removeFromLeft(50));
+    recordDuration.setBounds(recBlock.reduced(0, 2));
 
     // Mic Section
     auto micArea = bottomArea.removeFromLeft(80).reduced(5, 5);

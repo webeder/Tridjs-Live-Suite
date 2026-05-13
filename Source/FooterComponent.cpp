@@ -1,4 +1,5 @@
 #include "FooterComponent.h"
+#include "LanguageManager.h"
 
 FooterComponent::FooterComponent()
 {
@@ -29,11 +30,26 @@ FooterComponent::FooterComponent()
     juce::File iconFile("C:\\TridjsMIDI\\icone.png");
     if (iconFile.existsAsFile())
         appIcon = juce::ImageFileFormat::loadFrom(iconFile);
+
+    LanguageManager::getInstance().addChangeListener(this);
+    updateLanguage();
 }
 
 FooterComponent::~FooterComponent()
 {
+    LanguageManager::getInstance().removeChangeListener(this);
     stopTimer();
+}
+
+void FooterComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+{
+    updateLanguage();
+}
+
+void FooterComponent::updateLanguage()
+{
+    bpmTitleLabel.setText(TJS_L("FOOTER_MASTER_BPM"), juce::dontSendNotification);
+    repaint();
 }
 
 void FooterComponent::setBpm(double newBpm)

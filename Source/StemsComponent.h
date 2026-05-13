@@ -1,18 +1,23 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "LanguageManager.h"
 #include <functional>
 
 class StemsComponent : public juce::Component,
                        public juce::FileDragAndDropTarget,
-                       public juce::DragAndDropTarget
+                       public juce::DragAndDropTarget,
+                       public juce::ChangeListener
 {
 public:
     StemsComponent();
-    ~StemsComponent() override = default;
+    ~StemsComponent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void updateLanguage();
 
     // Callbacks for stem mute/unmute: index 0=vocal, 1=drums, 2=bass
     std::function<void(int, bool)> onStemMuteChanged;
@@ -30,9 +35,9 @@ public:
 private:
     bool isDraggingOver = false;
     juce::String loadedTrackName;
-    juce::TextButton vocalBtn { "VOCAL" };
-    juce::TextButton drumsBtn { "DRUMS" };
-    juce::TextButton bassBtn  { "BASS" };
+    juce::TextButton vocalBtn { "" };
+    juce::TextButton drumsBtn { "" };
+    juce::TextButton bassBtn  { "" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StemsComponent)
 };

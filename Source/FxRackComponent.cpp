@@ -1,4 +1,5 @@
 #include "FxRackComponent.h"
+#include "LanguageManager.h"
 #include "SerialManager.h"
 
 FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
@@ -12,6 +13,9 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
               false);
   tabs.addTab("SERIAL", juce::Colours::transparentBlack, &serialContent, false);
   tabs.addTab("CONFIG", juce::Colours::transparentBlack, &configContent, false);
+
+  LanguageManager::getInstance().addChangeListener(this);
+  updateLanguage();
 
   addAndMakeVisible(toggleBtn);
   toggleBtn.setInterceptsMouseClicks(true, false);
@@ -225,6 +229,40 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   serialContent.addAndMakeVisible(logCheckbox);
 
   startTimer(100); // 10 times per second for log updates
+}
+
+FxRackComponent::~FxRackComponent() {
+  LanguageManager::getInstance().removeChangeListener(this);
+}
+
+void FxRackComponent::changeListenerCallback (juce::ChangeBroadcaster* source) {
+  updateLanguage();
+}
+
+void FxRackComponent::updateLanguage() {
+  // Tabs
+  tabs.setTabName(0, "FX");
+  tabs.setTabName(1, "FX TOUCH");
+  tabs.setTabName(2, "RGB");
+  tabs.setTabName(3, TJS_L("TAB_LEARN"));
+  tabs.setTabName(4, "SERIAL");
+  tabs.setTabName(5, "CONFIG");
+
+  // Buttons/Labels
+  saveGlobalPresetBtn.setButtonText(TJS_L("FX_SAVE_SESSION"));
+  loadGlobalPresetBtn.setButtonText(TJS_L("FX_LOAD"));
+  deleteGlobalPresetBtn.setButtonText(TJS_L("FX_DELETE"));
+  removeRgbBrushBtn.setButtonText(TJS_L("FX_REMOVE"));
+  presetNameLabel.setText(TJS_L("FX_SESSION_NAME"), juce::dontSendNotification);
+  inputModeLabel.setText(TJS_L("FX_INPUT_MODE"), juce::dontSendNotification);
+  serialPortLabel.setText(TJS_L("FX_SERIAL_PORT"), juce::dontSendNotification);
+  touchTabContent.modeBtn.setButtonText(TJS_L("FX_ULTRA_MULTI"));
+  searchBox.setTextToShowWhenEmpty(TJS_L("SEARCH_DEVICES"), juce::Colours::grey);
+
+  for (auto &row : midiRows)
+    row->updateLanguage();
+
+  repaint();
 }
 
 void FxRackComponent::paint(juce::Graphics &g) {
