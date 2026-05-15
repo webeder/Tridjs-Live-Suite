@@ -103,6 +103,7 @@ public:
     // Smart Fader
     void setSmartFaderEnabled (bool enabled);
     bool isSmartFaderEnabled() const { return smartFaderEnabled; }
+    void handleSmartFader();
 
     // Volume Controls (0.0 to 1.0)
     void setMasterVolume (float vol);

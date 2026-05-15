@@ -1428,6 +1428,7 @@ private:
         explicit SyncTimer(MixerComponent& o) : owner(o) {}
         void timerCallback() override {
             owner.audioCore.handleSyncLogic();
+            owner.audioCore.handleSmartFader();
         }
     } syncTimer;
 

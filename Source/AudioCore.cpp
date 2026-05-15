@@ -101,10 +101,37 @@ void AudioCore::setCrossfaderPosition (float pos) { crossfaderPos = pos; }
 
 void AudioCore::setSmartFaderEnabled (bool enabled) {
     smartFaderEnabled = enabled;
-    if (enabled) {
-        setSyncEnabled(0, true);
-        setSyncEnabled(1, true);
-    }
+}
+
+void AudioCore::handleSmartFader() {
+    if (!smartFaderEnabled) return;
+
+    double bpmA = deckABpm;
+    double bpmB = deckBBpm;
+    if (bpmA < 20.0 || bpmB < 20.0) return;
+
+    float pos = crossfaderPos;
+    // Determine which deck is incoming
+    // pos < 0.5: mixing FROM deck A TO deck B → adjust B to match A
+    // pos > 0.5: mixing FROM deck B TO deck A → adjust A to match B
+    bool mixingToB = (pos < 0.5f);
+    double targetBpm = mixingToB ? bpmA : bpmB;
+    double currentBpm = mixingToB ? bpmB : bpmA;
+
+    // How far from center (0.0 = center, 1.0 = fully to one side)
+    float amount = std::abs(pos - 0.5f) * 2.0f;
+
+    // Lerp between current BPM and target BPM based on crossfader position
+    double targetRatio = targetBpm / currentBpm;
+    double blend = 1.0 + (targetRatio - 1.0) * amount;
+
+    // Convert to pitch adjustment (each 0.06 = 6% = 1 semitone approx)
+    double pitch = (blend - 1.0) / 0.06;
+
+    if (mixingToB)
+        setDeckPitch(1, pitch); // Adjust deck B
+    else
+        setDeckPitch(0, pitch); // Adjust deck A
 }
 
 void AudioCore::setDeckGain(int deckIdx, float gain) {
@@ -286,16 +313,15 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     
     float crossA, crossB;
     if (smartFaderEnabled && crossfaderPos > 0.01f && crossfaderPos < 0.99f) {
-        // Smart Fader: smooth curves + auto EQ based on crossfader position
         float pos = crossfaderPos;
-        // Non-linear volume curve (S-curve)
-        float sCurve = pos * pos * (3.0f - 2.0f * pos); // smoothstep
+        float sCurve = pos * pos * (3.0f - 2.0f * pos);
         crossA = 1.0f - sCurve;
         crossB = sCurve;
 
-        // Auto EQ: cut lows on outgoing, gentle roll on highs
-        float eqAScoop = (1.0f - sCurve) * 0.3f; // outgoing loses lows
-        float eqBScoop = sCurve * 0.3f;
+        // Auto EQ: outgoing track EQ is progressively cut
+        float eqAmt = std::abs(pos - 0.5f) * 2.0f; // 0 at center, 1 at edges
+        float eqAScoop = (1.0f - sCurve) * 0.25f * eqAmt;
+        float eqBScoop = sCurve * 0.25f * eqAmt;
         deckAState.eqLow = -eqAScoop * 12.0f;
         deckAState.eqMid = -eqAScoop * 4.0f;
         deckBState.eqLow = -eqBScoop * 12.0f;
@@ -303,7 +329,6 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
         updateEQFilters(0);
         updateEQFilters(1);
     } else {
-        // Normal crossfader
         crossA = std::min(1.0f, 2.0f * (1.0f - crossfaderPos));
         crossB = std::min(1.0f, 2.0f * crossfaderPos);
     }
