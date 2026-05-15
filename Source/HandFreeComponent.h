@@ -3,7 +3,6 @@
 #include <JuceHeader.h>
 #include "LanguageManager.h"
 #include "HeaderComponent.h"
-#include "StemsComponent.h"
 #include "PadsGridComponent.h"
 #include "FxRackComponent.h"
 #include "FooterComponent.h"
@@ -84,7 +83,6 @@ public:
     RgbManager& rgbManager;
 
     HeaderComponent header;
-    StemsComponent stems;
     PadsGridComponent gridPads;
     FxRackComponent fxRack;
     FooterComponent footer;

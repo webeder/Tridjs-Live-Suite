@@ -11,7 +11,6 @@ class ControllerSandboxWindow;
 #include "HandFreeComponent.h"
 
 #include "HeaderComponent.h"
-#include "StemsComponent.h"
 #include "PadsGridComponent.h"
 #include "FxRackComponent.h"
 #include "AudioCore.h"

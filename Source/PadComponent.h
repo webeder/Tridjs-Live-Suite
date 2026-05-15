@@ -63,7 +63,6 @@ private:
     juce::String currentFilePath;
 
     juce::ImageButton recordBtn, ejectBtn, loopBtn;
-    juce::Image micIcon, loopIcon, ejectIcon;
     juce::Colour customBaseColor { (juce::uint32)0xff1a1a1a };
     juce::Slider volumeSlider;
     float playProgress = 0.0f;

@@ -22,11 +22,6 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
     header.onLoopEnabled = [this](bool active) { audioEngine.setMainTrackLoopEnabled(active); };
     header.onFileDropped = [this](const juce::File& f) { audioEngine.loadMainTrack(f); };
     
-    // 1. Setup the callbacks first
-    stems.onStemMuteChanged = [this](int idx, bool muted) {
-        audioEngine.setStemMuted(idx, muted);
-    };
-
     for (int i = 0; i < 9; ++i) {
         if (auto* pad = gridPads.getPads()[i].get()) {
             pad->onPlayStateChanged = [this, i](int, bool state) {
@@ -69,7 +64,6 @@ HandFreeComponent::HandFreeComponent(AudioCore& engine, InputManager& input, Rgb
     targetRackWidth = 35.0f;
 
     addAndMakeVisible(header);
-    addAndMakeVisible(stems);
     addAndMakeVisible(gridPads);
     addAndMakeVisible(fxRack);
     addAndMakeVisible(footer);
@@ -154,8 +148,6 @@ void HandFreeComponent::resized()
     
     int rackWidth = fxRack.getWidth();
     fxRack.setBounds(body.removeFromRight(rackWidth));
-    
-    stems.setBounds(body.removeFromTop(50));
     
     // Bottom panel and Pads Grid
     bottomPanel.setBounds(body.removeFromBottom((int)currentBottomHeight).reduced(2, 0));

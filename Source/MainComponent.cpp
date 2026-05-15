@@ -402,7 +402,11 @@ MainComponent::MainComponent()
 
 
   handFreeComp->header.onFileDropped = loadTrackWithMetadata;
-  handFreeComp->header.onEject = [this] { audioEngine.ejectMainTrack(); };
+  handFreeComp->header.onEject = [this] {
+      audioEngine.ejectMainTrack();
+      handFreeComp->header.waveformDisplay.loadedTrackName = "";
+      handFreeComp->header.waveformDisplay.repaint();
+  };
   handFreeComp->header.onLoopSet = [this](double start, double duration) { audioEngine.setMainTrackLoopRange(start, duration); };
   handFreeComp->header.onLoopEnabled = [this](bool enabled) { audioEngine.setMainTrackLoopEnabled(enabled); };
   handFreeComp->header.onRecordToggled = [this](bool isRecording) {
@@ -414,8 +418,6 @@ MainComponent::MainComponent()
           });
       }
   };
-
-  handFreeComp->stems.onStemMuteChanged = [this](int idx, bool muted) { audioEngine.setStemMuted(idx, muted); };
 
   handFreeComp->fxRack.onInputModeChanged = [this](int modeIdx) { 
       auto mode = static_cast<InputManager::InputMode>(modeIdx);

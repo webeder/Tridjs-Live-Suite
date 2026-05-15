@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Fetch JUCE
 include(FetchContent)
 
-# Evitar alertas timestamp antigos do ONNX ou Github API
+# Evitar alertas timestamp antigos do Github API
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 if (POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
@@ -37,13 +37,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(soundtouch)
 
-# Fetch ONNX Runtime (Pre-compiled headers and binaries para Windows)
-set(ONNXRUNTIME_VERSION "1.16.3")
-FetchContent_Declare(
-    onnxruntime
-    URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip
-)
-
 # Fetch SQLite3 (Amalgamation)
 FetchContent_Declare(
     sqlite3_source
@@ -56,7 +49,7 @@ FetchContent_Declare(
     URL https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz
 )
 
-FetchContent_MakeAvailable(onnxruntime sqlite3_source duktape)
+FetchContent_MakeAvailable(sqlite3_source duktape)
 
 # Create a static library for SQLite3
 add_library(sqlite3 STATIC "${sqlite3_source_SOURCE_DIR}/sqlite3.c")
@@ -88,6 +81,8 @@ juce_add_gui_app(TridjsLiveSuite
 juce_add_binary_data(TridjsAssets
     SOURCES
         "${CMAKE_SOURCE_DIR}/splash2.png"
+        "${CMAKE_SOURCE_DIR}/icone.png"
+        "${CMAKE_SOURCE_DIR}/Source/Assets/fa-solid-900.ttf"
 )
 
 juce_generate_juce_header(TridjsLiveSuite)
@@ -114,8 +109,6 @@ target_sources(TridjsLiveSuite
         Source/TridjsLookAndFeel.h
         Source/HeaderComponent.cpp
         Source/HeaderComponent.h
-        Source/StemsComponent.cpp
-        Source/StemsComponent.h
         Source/PadComponent.cpp
         Source/PadComponent.h
         Source/PadsGridComponent.cpp
@@ -149,7 +142,6 @@ target_sources(TridjsLiveSuite
 target_include_directories(TridjsLiveSuite PRIVATE
     ${stk_SOURCE_DIR}/include
     ${soundtouch_SOURCE_DIR}/include
-    ${onnxruntime_SOURCE_DIR}/include
     ${sqlite3_source_SOURCE_DIR}
     ${duktape_SOURCE_DIR}/src
 )
@@ -186,15 +178,7 @@ target_link_libraries(TridjsLiveSuite
         # Link Custom Libs
         TridjsAssets
         sqlite3
-        "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib"
         setupapi
-)
-
-# Copiar DLL do ONNX para o diretório do executável após a build
-add_custom_command(TARGET TridjsLiveSuite POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll"
-    $<TARGET_FILE_DIR:TridjsLiveSuite>
 )
 
 # Copiar pasta lang/ (traduções XML) para ao lado do executável após a build

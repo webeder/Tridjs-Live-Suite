@@ -5,7 +5,6 @@
 #include <memory>
 #include <atomic>
 #include <thread>
-#include <onnxruntime_cxx_api.h>
 #include "PluginScannerManager.h"
 #include "VocalVstChain.h"
 
@@ -91,10 +90,6 @@ public:
     void setFxAmount (int deckIdx, int fxIndex, float amount);
     bool isFxEnabled (int deckIdx, int fxIndex) const;
     float getFxAmount (int deckIdx, int fxIndex) const;
-
-    // Stems Controls (frequency-band mute/unmute)
-    void setStemMuted (int stemIndex, bool muted); // 0=vocal, 1=drums, 2=bass
-    bool isStemMuted (int stemIndex) const;
 
     void setGlobalPitchRatio (double ratio);
     void setDeckPitch (int deckIdx, double pitch);
@@ -231,9 +226,9 @@ private:
     juce::AudioThumbnail thumbnailH { 512, formatManager, thumbnailCache };
 
     std::atomic<bool> isScratching[3] = { false, false, false };
-    float jogBend[3] = { 0.0f, 0.0f, 0.0f };
+    std::atomic<float> jogBend[3] = { 0.0f, 0.0f, 0.0f };
 
-    double deckAPitch = 0.0, deckBPitch = 0.0, deckHPitch = 0.0; // -1.0 to 1.0 (maps to -6% to +6%)
+    std::atomic<double> deckAPitch { 0.0 }, deckBPitch { 0.0 }, deckHPitch { 0.0 }; // -1.0 to 1.0 (maps to -6% to +6%)
     float masterVolume = 1.0f;
     float trackVolume = 1.0f;
     float crossfaderPos = 0.5f;
@@ -316,20 +311,7 @@ private:
     PluginScannerManager vstManager;
     VocalVstChain vocalVstChain { vstManager.getFormatManager() };
 
-    // ONNX Runtime for Demucs (reserved)
     static constexpr int NUM_FX = 6;
-    std::unique_ptr<Ort::Env> ortEnv;
-    std::unique_ptr<Ort::Session> ortSession;
-    bool onnxInitialized = false;
-    
-    void asyncExtractStems (const juce::File& file);
-
-    // Stem Audio Storage (Memory persistent)
-    juce::AudioBuffer<float> vocalBuffer;
-    juce::AudioBuffer<float> drumsBuffer;
-    juce::AudioBuffer<float> bassBuffer;
-    std::atomic<bool> stemsAreReady { false };
-    std::atomic<float> stemProgress { 0.0f };
 
     // Real DSP Effect Processors (Global/HandFree - kept for compatibility)
     struct EffectSlot {
@@ -344,11 +326,6 @@ private:
     float reverbState[2] = { 0.0f, 0.0f };
     float lfoPhase = 0.0f;
     double currentSampleRate = 44100.0;
-
-    // Stems State (3 bands: 0=vocal, 1=drums, 2=bass)
-    static constexpr int NUM_STEMS = 3;
-    bool stemMuted[NUM_STEMS] = {};
-    juce::LinearSmoothedValue<float> stemGains[NUM_STEMS];
 
     // CrossfadingLoopSource MUST be defined before PlaybackChannel since
     // PlaybackChannel holds a unique_ptr to it.

@@ -1,6 +1,6 @@
 #include "FooterComponent.h"
 #include "LanguageManager.h"
-#include "ResourceHelper.h"
+#include "BinaryData.h"
 
 FooterComponent::FooterComponent()
 {
@@ -27,10 +27,8 @@ FooterComponent::FooterComponent()
     // Metronome Timer (UI refresh)
     startTimer(50); // 50ms pulse refresh rate
 
-    // Load App Icon
-    juce::File iconFile = findResourceFile("icone.png");
-    if (iconFile.existsAsFile())
-        appIcon = juce::ImageFileFormat::loadFrom(iconFile);
+    // Load App Icon from binary resources (embedded in executable)
+    appIcon = juce::ImageFileFormat::loadFrom(BinaryData::icone_png, BinaryData::icone_pngSize);
 
     LanguageManager::getInstance().addChangeListener(this);
     updateLanguage();

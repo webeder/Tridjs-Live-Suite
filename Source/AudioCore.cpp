@@ -4,14 +4,6 @@
 
 AudioCore::AudioCore()
 {
-    // Initialize ONNX Runtime
-    try {
-        ortEnv = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "TridjsDemucs");
-        onnxInitialized = true;
-    } catch (...) {
-        onnxInitialized = false;
-    }
-
     formatManager.registerBasicFormats();
 
     for (int i = 0; i < NUM_FX; ++i)
@@ -37,9 +29,6 @@ AudioCore::AudioCore()
 
     // Pads Setup
     // (Pads are now self-contained PadEngine structures initialized automatically)
-
-    for (int i = 0; i < NUM_STEMS; ++i)
-        stemGains[i].setCurrentAndTargetValue(1.0f);
 
     // Init EQ Filters
     for (int i = 0; i < 2; ++i) {
@@ -79,9 +68,6 @@ void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
     delayBuffer.clear();
     writePos = 0;
     currentSampleRate = sampleRate;
-
-    for (int i = 0; i < NUM_STEMS; ++i)
-        stemGains[i].reset(sampleRate, 0.1);
 
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
@@ -446,35 +432,6 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
         }
     }
 
-    bool anyStemActive = false;
-    for (int s = 0; s < NUM_STEMS; ++s) {
-        if (stemGains[s].getNextValue() < 0.99f || stemGains[s].isSmoothing()) 
-            anyStemActive = true;
-    }
-
-    if (stemsAreReady.load() && anyStemActive && isMainTrackPlaying())
-    {
-        auto posSec = getMainTrackPosition();
-        auto startSample = (juce::int64)(posSec * 44100.0);
-
-        for (int ch = 0; ch < mainBuffer->getNumChannels(); ++ch) {
-            auto* out = mainBuffer->getWritePointer(ch, start);
-            for (int i = 0; i < num; ++i) {
-                juce::int64 idx = startSample + i;
-                if (idx >= 0 && idx < vocalBuffer.getNumSamples()) {
-                    float v = vocalBuffer.getSample(ch % vocalBuffer.getNumChannels(), (int)idx);
-                    float d = drumsBuffer.getSample(ch % drumsBuffer.getNumChannels(), (int)idx);
-                    float b = bassBuffer.getSample(ch % bassBuffer.getNumChannels(), (int)idx);
-                    
-                    out[i] = (v * stemGains[0].getCurrentValue()) + 
-                             (d * stemGains[1].getCurrentValue()) + 
-                             (b * stemGains[2].getCurrentValue());
-                }
-            }
-        }
-    }
-    for (int s = 0; s < NUM_STEMS; ++s) stemGains[s].skip(num);
-    
     currentPeakLevel.store(mainBuffer->getMagnitude(start, num));
 
     if (masterRecorder.isRecording.load()) {
@@ -734,43 +691,6 @@ bool AudioCore::loadHandsFreeDeck(const juce::File& file, double bpm) {
         mainTrackBpm = deckHBpm;
         thumbnailH.setSource(new juce::FileInputSource(file));
         
-        // Load pre-computed stems for DJ Hands Free
-        stemsAreReady = false;
-        if (trackDb != nullptr) {
-            TrackDatabase::Track t;
-            if (trackDb->getTrackByPath(file.getFullPathName(), t)) {
-                TrackDatabase::Analysis a;
-                if (trackDb->loadAnalysis(t.id, a) && 
-                    juce::File(a.vocalStemPath).existsAsFile() &&
-                    juce::File(a.instrumentalStemPath).existsAsFile() &&
-                    juce::File(a.beatStemPath).existsAsFile()) 
-                {
-                    // Load the pre-computed stems into the buffers in a background thread
-                    std::thread([this, a]() {
-                        auto loadBuffer = [this](const juce::String& path, juce::AudioBuffer<float>& buffer) {
-                            std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(juce::File(path)));
-                            if (reader) {
-                                buffer.setSize(reader->numChannels, (int)reader->lengthInSamples);
-                                reader->read(&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
-                            } else {
-                                buffer.setSize(2, 0);
-                            }
-                        };
-                        loadBuffer(a.vocalStemPath, vocalBuffer);
-                        loadBuffer(a.beatStemPath, drumsBuffer);
-                        loadBuffer(a.instrumentalStemPath, bassBuffer);
-                        stemsAreReady = true;
-                    }).detach();
-                } else {
-                    asyncExtractStems(file); // Fallback to realtime if not processed
-                }
-            } else {
-                asyncExtractStems(file);
-            }
-        } else {
-            asyncExtractStems(file);
-        }
-        
         return true;
     }
     return false;
@@ -813,7 +733,17 @@ void AudioCore::triggerDeckCue (int deckIdx)
 }
 
 void AudioCore::seekHandsFreeDeck(double pos) { handsFreeChannel->transport->setPosition(pos); }
-void AudioCore::ejectHandsFreeDeck() { handsFreeChannel->transport->stop(); handsFreeChannel->transport->setSource(nullptr); handsFreeChannel->readerSource.reset(); }
+void AudioCore::ejectHandsFreeDeck() {
+    handsFreeChannel->transport->stop();
+    handsFreeChannel->transport->setSource(nullptr);
+    handsFreeChannel->readerSource.reset();
+    deckHName = "";
+    deckHPath = "";
+    deckHCue = 0.0;
+    deckHPitch = 0.0;
+    thumbnailH.clear();
+    setDeckLoopEnabled(2, false);
+}
 
 
 
@@ -988,24 +918,6 @@ double AudioCore::getDeckSourceSampleRate(int deckIdx) const {
 }
 
 
-void AudioCore::asyncExtractStems(const juce::File& file)
-{
-    stemsAreReady = false;
-    stemProgress = 0.0f;
-
-    std::thread([this, file]() {
-        juce::AudioFormatManager manager;
-        manager.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> reader(manager.createReaderFor(file));
-
-        if (reader == nullptr) return;
-
-        // Stems desativados
-        stemsAreReady = false;
-        stemProgress = 1.0f;
-    }).detach();
-}
-
 void AudioCore::releaseResources()
 {
     mixer.releaseResources();
@@ -1026,7 +938,7 @@ void AudioCore::setDeckPitch(int deckIdx, double pitch) {
 void AudioCore::updateDeckSpeed(int deckIdx)
 {
     double pitch = (deckIdx == 0) ? deckAPitch : (deckIdx == 1 ? deckBPitch : deckHPitch);
-    double bend = (deckIdx >= 0 && deckIdx < 3) ? jogBend[deckIdx] : 0.0;
+    float bend = (deckIdx >= 0 && deckIdx < 3) ? jogBend[deckIdx].load() : 0.0f;
     
     double speed = (1.0 + (pitch * 0.06)) + bend;
     
@@ -1422,20 +1334,6 @@ void AudioCore::stopPadRecording (int padIndex, std::function<void(juce::File)> 
     }
 }
 
-void AudioCore::setStemMuted(int stemIndex, bool muted)
-{
-    if (stemIndex >= 0 && stemIndex < NUM_STEMS) {
-        stemMuted[stemIndex] = muted;
-        stemGains[stemIndex].setTargetValue(muted ? 0.0f : 1.0f);
-    }
-}
-
-bool AudioCore::isStemMuted(int stemIndex) const
-{
-    if (stemIndex >= 0 && stemIndex < NUM_STEMS)
-        return stemMuted[stemIndex];
-    return false;
-}
 void AudioCore::startMasterRecording()
 {
     const juce::ScopedLock sl(masterRecorder.lock);

@@ -1,13 +1,36 @@
 #include "PadComponent.h"
-#include "ResourceHelper.h"
+#include "BinaryData.h"
+
+namespace {
+
+static juce::Font getFaIconsFont()
+{
+    static juce::Font font(juce::Typeface::createSystemTypefaceFor(
+        BinaryData::fasolid900_ttf,
+        BinaryData::fasolid900_ttfSize));
+    return font;
+}
+
+static juce::Image createFAIcon(int glyph, int size)
+{
+    juce::Image img(juce::Image::ARGB, size, size, true);
+    juce::Graphics g(img);
+    g.setColour(juce::Colours::white);
+    g.setFont(getFaIconsFont().withHeight((float)size * 0.7f));
+    g.drawText(juce::String::charToString((juce::juce_wchar)glyph),
+               img.getBounds(), juce::Justification::centred);
+    return img;
+}
+
+}
 
 PadComponent::PadComponent (int padIndex) : index (padIndex)
 {
-    micIcon = juce::ImageFileFormat::loadFrom(findResourceFile("mic.png"));
-    loopIcon = juce::ImageFileFormat::loadFrom(findResourceFile("loop.png"));
-    ejectIcon = juce::ImageFileFormat::loadFrom(findResourceFile("ejt.png"));
+    auto recordImg = createFAIcon(0xf130, 20); // fa-microphone
+    auto loopImg   = createFAIcon(0xf021, 20); // fa-arrows-rotate
+    auto ejectImg  = createFAIcon(0xf052, 20); // fa-eject
 
-    recordBtn.setImages(false, true, true, micIcon, 1.0f, {}, micIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), micIcon, 1.0f, juce::Colours::red.withAlpha(0.6f));
+    recordBtn.setImages(false, true, true, recordImg, 1.0f, {}, recordImg, 1.0f, juce::Colours::white.withAlpha(0.2f), recordImg, 1.0f, juce::Colours::red.withAlpha(0.6f));
     recordBtn.onClick = [this] {
         isRecording = !isRecording;
         if (isRecording) { 
@@ -22,7 +45,7 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     };
     addAndMakeVisible (recordBtn);
 
-    loopBtn.setImages(false, true, true, loopIcon, 1.0f, {}, loopIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), loopIcon, 1.0f, juce::Colours::orange.withAlpha(0.6f));
+    loopBtn.setImages(false, true, true, loopImg, 1.0f, {}, loopImg, 1.0f, juce::Colours::white.withAlpha(0.2f), loopImg, 1.0f, juce::Colours::orange.withAlpha(0.6f));
     loopBtn.setClickingTogglesState(true);
     loopBtn.onClick = [this] {
         isLoopActive = loopBtn.getToggleState();
@@ -37,7 +60,7 @@ PadComponent::PadComponent (int padIndex) : index (padIndex)
     };
     addAndMakeVisible (loopBtn);
 
-    ejectBtn.setImages(false, true, true, ejectIcon, 1.0f, {}, ejectIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), ejectIcon, 1.0f, juce::Colours::lightgrey.withAlpha(0.6f));
+    ejectBtn.setImages(false, true, true, ejectImg, 1.0f, {}, ejectImg, 1.0f, juce::Colours::white.withAlpha(0.2f), ejectImg, 1.0f, juce::Colours::lightgrey.withAlpha(0.6f));
     ejectBtn.onClick = [this] {
         loadedFilename = ""; 
         currentFilePath = ""; 
@@ -158,10 +181,13 @@ void PadComponent::resized()
     // Position invisible volume slider on the right edge where the indicator is drawn
     volumeSlider.setBounds(area.removeFromRight(15).reduced(2, 10));
 
-    auto controlsArea = area.removeFromBottom(25).reduced(5, 0);
-    recordBtn.setBounds(controlsArea.removeFromLeft(25));
-    loopBtn.setBounds(controlsArea.removeFromLeft(25));
-    ejectBtn.setBounds(controlsArea.removeFromLeft(25));
+    if (area.getHeight() >= 30)
+    {
+        auto controlsArea = area.removeFromBottom(25).reduced(5, 0);
+        recordBtn.setBounds(controlsArea.removeFromLeft(25));
+        loopBtn.setBounds(controlsArea.removeFromLeft(25));
+        ejectBtn.setBounds(controlsArea.removeFromLeft(25));
+    }
 }
 
 void PadComponent::mouseDown (const juce::MouseEvent& e)
