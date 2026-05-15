@@ -137,6 +137,8 @@ private:
     std::map<int, std::map<int, int>> msbState; 
     void processControllerEvents();
     void loadFlx10Mapping();
+    void autoDetectController();
+    bool flx10MappingLoaded = false;
 
     std::unique_ptr<ControllerManagerWindow> controllerManagerWindow;
 

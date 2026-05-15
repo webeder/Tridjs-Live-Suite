@@ -168,7 +168,28 @@ double AnalysisManager::detectBpm(juce::AudioFormatReader *reader) {
     }
   }
 
-  double bpm = 60.0 * dsSr / bestLagIdx;
+  // Harmonic summation: add ACF at each lag plus half-weight at double lag
+  // (subharmonic). This naturally prefers tempos with energy at multiple beat
+  // levels (quarter + half note), avoiding the common octave-down error.
+  float bestHarmonic = 0.0f;
+  int bestHarmonicLag = bestLagIdx;
+  for (int lag = minLag; lag < maxLag; lag += step) {
+      size_t idx = static_cast<size_t>((lag - minLag) / step);
+      if (idx >= static_cast<size_t>(range)) break;
+      float harmonic = acf[idx];
+      int doubleLag = lag * 2;
+      if (doubleLag < maxLag) {
+          size_t dblIdx = static_cast<size_t>((doubleLag - minLag) / step);
+          if (dblIdx < static_cast<size_t>(range))
+              harmonic += acf[dblIdx] * 0.5f;
+      }
+      if (harmonic > bestHarmonic) {
+          bestHarmonic = harmonic;
+          bestHarmonicLag = lag;
+      }
+  }
+
+  double bpm = 60.0 * dsSr / bestHarmonicLag;
   return juce::jlimit(60.0, 200.0, std::round(bpm * 10.0) / 10.0);
 }
 

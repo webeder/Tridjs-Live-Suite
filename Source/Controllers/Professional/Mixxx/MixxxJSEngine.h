@@ -60,25 +60,20 @@ public:
 
         if (parts.size() == 0) return;
 
-        duk_push_global_object(ctx); // [global]
+        duk_push_global_object(ctx);
 
         for (int i = 0; i < parts.size(); ++i)
         {
-            duk_get_prop_string(ctx, -1, parts[i].toRawUTF8()); // [global, ..., prop]
+            duk_get_prop_string(ctx, -1, parts[i].toRawUTF8());
             if (duk_is_undefined(ctx, -1))
             {
-                duk_pop_2(ctx); // pop undefined and previous parent
+                duk_pop_2(ctx);
                 return;
             }
-            
             if (i < parts.size() - 1)
-            {
-                // Move to next level
-                duk_remove(ctx, -2); // pop the parent, keep the current object
-            }
+                duk_remove(ctx, -2);
         }
 
-        // Now the function is at the top of stack
         if (duk_is_function(ctx, -1))
         {
             duk_push_number(ctx, value);
@@ -88,8 +83,40 @@ public:
                 juce::Logger::writeToLog("JS Call Error (" + funcName + "): " + juce::String(duk_safe_to_string(ctx, -1)));
             }
         }
-        
-        duk_pop_2(ctx); // Pop result (from pcall) and the global/parent object
+        duk_pop_2(ctx);
+    }
+
+    /** Calls a Mixxx-style script binding with full MIDI parameters:
+        function(channel, control, value, status, group) */
+    void callMixxxFunction(const juce::String& funcName, int channel, int control, int value, int status, const juce::String& group)
+    {
+        const juce::ScopedLock lock (ctxLock);
+        if (!ctx) return;
+
+        juce::StringArray parts;
+        parts.addTokens(funcName, ".", "");
+        if (parts.size() == 0) return;
+
+        duk_push_global_object(ctx);
+        for (int i = 0; i < parts.size(); ++i)
+        {
+            duk_get_prop_string(ctx, -1, parts[i].toRawUTF8());
+            if (duk_is_undefined(ctx, -1)) { duk_pop_2(ctx); return; }
+            if (i < parts.size() - 1) duk_remove(ctx, -2);
+        }
+
+        if (duk_is_function(ctx, -1))
+        {
+            duk_push_number(ctx, (double)channel);
+            duk_push_number(ctx, (double)control);
+            duk_push_number(ctx, (double)value);
+            duk_push_number(ctx, (double)status);
+            duk_push_string(ctx, group.toRawUTF8());
+            if (duk_pcall(ctx, 5) != 0) {
+                juce::Logger::writeToLog("JS Call Error (" + funcName + "): " + juce::String(duk_safe_to_string(ctx, -1)));
+            }
+        }
+        duk_pop_2(ctx);
     }
 
 private:
@@ -197,6 +224,47 @@ private:
         duk_put_prop_string(ctx, -2, "scratchDisable");
 
         duk_put_global_string(ctx, "engine");
+
+        // 3. 'script' object with deckFromGroup
+        duk_push_object(ctx);
+        duk_push_c_function(ctx, [](duk_context* c) -> duk_ret_t {
+            juce::String group = duk_get_string(c, 0);
+            int match = group.indexOf("[Channel") + 8;
+            int end = group.indexOf(match, "]");
+            if (end > match) {
+                duk_push_number(c, group.substring(match, end).getIntValue());
+                return 1;
+            }
+            duk_push_null(c);
+            return 1;
+        }, 1);
+        duk_put_prop_string(ctx, -2, "deckFromGroup");
+        duk_put_global_string(ctx, "script");
+
+        // 4. 'midi' object with sendShortMsg (output only - logs for now)
+        duk_push_object(ctx);
+        duk_push_c_function(ctx, [](duk_context* c) -> duk_ret_t {
+            int status = duk_get_int(c, 0);
+            int data1 = duk_get_int(c, 1);
+            int data2 = duk_get_int(c, 2);
+            juce::Logger::writeToLog("MIDI OUT: " + juce::String::toHexString(status) + " " +
+                                     juce::String::toHexString(data1) + " " +
+                                     juce::String::toHexString(data2));
+            return 0;
+        }, 3);
+        duk_put_prop_string(ctx, -2, "sendShortMsg");
+        duk_put_global_string(ctx, "midi");
+
+        // 5. 'midi' stub methods (mixxx standard)
+        duk_eval_string(ctx, "midi.makeInputHandler = function(){};");
+
+        // 6. 'engine' stub methods (mixxx standard)
+        duk_eval_string(ctx, "engine.makeConnection = function(){}; engine.beginTimer = function(){ return 0; }; engine.stopTimer = function(){}; engine.softTakeover = function(){};");
+        duk_pop(ctx);
+
+        // 7. 'components' stub (prevents init errors)
+        duk_eval_string(ctx, "var components = { Component: function(){}, ComponentContainer: function(){} };");
+        duk_pop(ctx);
     }
 
     int parseDeckFromGroup (const juce::String& group)
@@ -222,6 +290,7 @@ private:
         if (key == "reloop_toggle")   return ControllerEventType::Reloop;
         if (key == "loop_halve")      return ControllerEventType::LoopHalve;
         if (key == "loop_double")     return ControllerEventType::LoopDouble;
+        if (key == "jog" || key == "wheel") return ControllerEventType::JogBend;
         return ControllerEventType::Unknown;
     }
 

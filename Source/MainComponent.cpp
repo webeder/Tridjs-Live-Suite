@@ -193,16 +193,13 @@ MainComponent::MainComponent()
       // 2. Handle Script Bindings (Mixxx JS compatible) - QUEUED to UI thread
       if (ctrl.isScriptBinding && jsEngine)
       {
-          ControllerInputEvent scriptEv;
-          scriptEv.type = ControllerEventType::ScriptCall;
-          scriptEv.value = (float)val7bit;
-          scriptEv.deckIndex = targetDeck;
-          
-          // Copy function name to fixed buffer
           juce::String funcName = ctrl.key;
-          funcName.copyToUTF8(scriptEv.scriptKey, sizeof(scriptEv.scriptKey));
-          
-          controllerRouter.pushEvent(scriptEv);
+          juce::String group = ctrl.group;
+          int midiChannel = (status & 0x0F); // 0-based MIDI channel
+          juce::MessageManager::callAsync([this, funcName, group, midiChannel, midino, val7bit, status]() {
+              if (jsEngine)
+                  jsEngine->callMixxxFunction(funcName, midiChannel, midino, val7bit, status, group);
+          });
       }
   };
 
@@ -504,6 +501,7 @@ void MainComponent::timerCallback() {
     }
 
     processControllerEvents();
+    autoDetectController();
 }
 
 void MainComponent::paint (juce::Graphics& g) {
@@ -1138,6 +1136,23 @@ void MainComponent::loadFlx10Mapping()
     }
 
     loadControllerMapping(mappingFile);
+    flx10MappingLoaded = true;
+}
+
+void MainComponent::autoDetectController()
+{
+    if (flx10MappingLoaded) return;
+
+    auto devices = juce::MidiInput::getAvailableDevices();
+    for (auto& d : devices)
+    {
+        if (d.name.containsIgnoreCase("FLX10") || d.name.containsIgnoreCase("DDJ-FLX10"))
+        {
+            juce::Logger::writeToLog("Auto-detected: " + d.name + " - loading FLX10 mapping");
+            loadFlx10Mapping();
+            break;
+        }
+    }
 }
 
 void MainComponent::processControllerEvents()
@@ -1193,8 +1208,10 @@ void MainComponent::processControllerEvents()
                 break;
 
             case ControllerEventType::Pitch:
-                // FLX10 pitch fader is inverted: 0 = top (+6%), 16383 = bottom (-6%)
-                // So we invert: pitch = 1.0 - normalized, then remap to [-1, +1]
+                // When Smart Fader is active, ignore physical pitch faders (FLX10 sends continuous
+                // position updates that would fight with the Smart Fader's automatic BPM blending)
+                if (audioEngine.isSmartFaderEnabled() && ev.deckIndex < 2)
+                    break;
                 audioEngine.setDeckPitch(ev.deckIndex, (1.0f - ev.value) * 2.0f - 1.0f);
                 break;
 
@@ -1215,14 +1232,11 @@ void MainComponent::processControllerEvents()
                 break;
 
             case ControllerEventType::JogScratch:
-                // ev.value is already the signed delta from scratchTick (e.g. -3 to +3)
-                // Scale down for smooth feel: each tick = small pitch shift
-                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.5f);
+                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.04f);
                 break;
 
             case ControllerEventType::JogBend:
-                // Nudge mode: small pitch adjustment, not scratch
-                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.1f);
+                audioEngine.applyJogDelta(ev.deckIndex, ev.value * 0.02f);
                 break;
 
             case ControllerEventType::LoopIn:

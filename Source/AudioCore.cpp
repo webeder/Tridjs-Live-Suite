@@ -178,17 +178,18 @@ void AudioCore::keepBeatsAligned() {
 void AudioCore::handleSmartFader() {
     if (!smartFaderEnabled) return;
 
+    // Re-assert sync every cycle (physical controller buttons won't override)
+    setSyncEnabled(0, true);
+    setSyncEnabled(1, true);
+    if (masterDeckIdx < 0) masterDeckIdx = 0;
+
     double baseA = deckABpm;
     double baseB = deckBBpm;
     if (baseA < 20.0 || baseB < 20.0) return;
 
     float pos = crossfaderPos;
-    // pos=0   → target = deck A BPM  (ambos a 130)
-    // pos=0.5 → target = média       (ambos a 125)
-    // pos=1   → target = deck B BPM  (ambos a 120)
     double targetBpm = baseA + (baseB - baseA) * (double)pos;
 
-    // Ambos os decks convergem para o mesmo BPM alvo
     double pitchA = (targetBpm / baseA - 1.0) / 0.06;
     double pitchB = (targetBpm / baseB - 1.0) / 0.06;
 
@@ -829,19 +830,9 @@ void AudioCore::applyJogDelta (int deckIdx, float delta)
     
     if (transport == nullptr) return;
 
-    if (isScratching[deckIdx])
-    {
-        // Direct seek for scratching
-        double currentPos = transport->getCurrentPosition();
-        double newPos = currentPos + (delta * 0.1); // Sensitivity factor
-        transport->setPosition(std::max(0.0, std::min(transport->getLengthInSeconds(), newPos)));
-    }
-    else
-    {
-        // Pitch bend
-        jogBend[deckIdx] = delta * 0.05f; // Small pitch nudge
-        updateDeckSpeed(deckIdx);
-    }
+    double currentPos = transport->getCurrentPosition();
+    double newPos = currentPos + (double)delta;
+    transport->setPosition(std::max(0.0, std::min(transport->getLengthInSeconds(), newPos)));
 }
 
 bool AudioCore::isMainTrackLoopEnabled() const {
