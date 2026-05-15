@@ -790,8 +790,6 @@ void HeaderComponent::filesDropped(const juce::StringArray& files, int, int)
         if (file.endsWithIgnoreCase(".wav") || file.endsWithIgnoreCase(".mp3")) {
             juce::File f(file);
             waveformDisplay.loadedTrackName = f.getFileNameWithoutExtension();
-            audioCore.setDeckCuePoint(2, 0.0);
-            waveformDisplay.generateRgbWaveform(f);
             waveformDisplay.repaint();
             if (onFileDropped) onFileDropped(f);
             break;
@@ -851,7 +849,7 @@ void HeaderComponent::itemDropped(const juce::DragAndDropTarget::SourceDetails& 
         waveformDisplay.loadedTrackName = fileToLoad.getFileNameWithoutExtension();
         waveformDisplay.isPlaying = false;
         audioCore.setDeckCuePoint(2, 0.0);
-        waveformDisplay.generateRgbWaveform(fileToLoad);
+        // generateRgbWaveform é chamado dentro de onFileDropped (loadTrackWithMetadata)
         if (onFileDropped) onFileDropped(fileToLoad);
     }
     

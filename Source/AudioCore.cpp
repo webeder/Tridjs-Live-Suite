@@ -866,59 +866,11 @@ void AudioCore::asyncExtractStems(const juce::File& file)
         juce::AudioFormatManager manager;
         manager.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> reader(manager.createReaderFor(file));
-        
+
         if (reader == nullptr) return;
 
-        int numCh = reader->numChannels;
-        int numSamples = (int)reader->lengthInSamples;
-
-        vocalBuffer.setSize(numCh, numSamples);
-        drumsBuffer.setSize(numCh, numSamples);
-        bassBuffer.setSize(numCh, numSamples);
-
-        // Temp buffer for processing
-        juce::AudioBuffer<float> tempBuffer(numCh, numSamples);
-        reader->read(&tempBuffer, 0, numSamples, 0, true, true);
-
-        // Proof of concept extraction (High-Precision 4th Order Crossover)
-        for (int ch = 0; ch < numCh; ++ch)
-        {
-            auto* src = tempBuffer.getReadPointer(ch);
-            auto* vOut = vocalBuffer.getWritePointer(ch);
-            auto* dOut = drumsBuffer.getWritePointer(ch);
-            auto* bOut = bassBuffer.getWritePointer(ch);
-
-            // Per-channel internal filter states
-            float lp[4] = {0,0,0,0};
-            float hp[4] = {0,0,0,0};
-
-            for (int i = 0; i < numSamples; ++i)
-            {
-                float s = src[i];
-                
-                // 4th Order LP (Bass < 150Hz) - coefficient calibrated for 44.1k
-                float lpIn = s;
-                for(int p=0; p<4; ++p) {
-                    lp[p] += 0.022f * (lpIn - lp[p]);
-                    lpIn = lp[p];
-                }
-                float bass = lp[3];
-
-                // 4th Order HP (Drums/High > 4000Hz)
-                float hpIn = s;
-                for(int p=0; p<4; ++p) {
-                    hp[p] += 0.22f * (hpIn - hp[p]);
-                    hpIn = hp[p];
-                }
-                float highs = s - hp[3];
-
-                bOut[i] = bass;
-                dOut[i] = highs;
-                vOut[i] = s - bass - highs; // Pure Mid/Vocal residue
-            }
-        }
-
-        stemsAreReady = true;
+        // Stems desativados
+        stemsAreReady = false;
         stemProgress = 1.0f;
     }).detach();
 }
@@ -1303,7 +1255,7 @@ void AudioCore::stopPadRecording (int padIndex, std::function<void(juce::File)> 
         // 2. Save in background thread
         std::thread([tempBuffer, numSamples, padIndex, sr, onFinished]() {
             auto samplersDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
-                                .getChildFile("tridjs_lifeStudio")
+                                .getChildFile("tridjsLiveSuite")
                                 .getChildFile("samplers");
             samplersDir.createDirectory();
             

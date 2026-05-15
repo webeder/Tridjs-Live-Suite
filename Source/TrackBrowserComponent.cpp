@@ -230,7 +230,7 @@ void TrackBrowserComponent::loadFolder(const juce::File &folder, bool recursive)
   // TEMPORARY DIAGNOSTIC: Force non-recursive
   bool shouldBeRecursive = false; 
 
-  currentView = folder.getFullPathName().contains("tridjs_lifeStudio")
+  currentView = folder.getFullPathName().contains("tridjsLiveSuite")
                     ? ViewType::Recordings
                     : ViewType::Folder;
   activePlaylistId = -1;
@@ -832,7 +832,7 @@ void TrackBrowserComponent::importFiles(const juce::StringArray &paths) {
     juce::File f(path);
 
     auto processFile = [&](const juce::File &sf) {
-      // analysisManager.queueTrack(sf); // TEMPORARY DIAGNOSTIC: NO ANALYSIS
+      analysisManager.queueTrack(sf);
 
       // Add to view instantly for real-time update
       bool exists = false;
@@ -925,7 +925,7 @@ void TrackBrowserComponent::SidebarItem::itemClicked(
   else if (name == "Gravações") {
     auto musicDir =
         juce::File::getSpecialLocation(juce::File::userMusicDirectory);
-    auto tridjsDir = musicDir.getChildFile("tridjs_lifeStudio");
+    auto tridjsDir = musicDir.getChildFile("tridjsLiveSuite");
     owner.loadFolder(tridjsDir,
                      true); // Search recursively for recordings/samplers
   }

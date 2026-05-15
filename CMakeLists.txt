@@ -80,14 +80,14 @@ juce_add_gui_app(TridjsLiveSuite
     PRODUCT_NAME "Tridjs Live Suite"
     COMPANY_NAME "Tridjs"
     VERSION 1.0.0
-    ICON_BIG "C:/TridjsMIDI/icone.png"
-    ICON_SMALL "C:/TridjsMIDI/icone.png"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/icone.png"
+    ICON_SMALL "${CMAKE_SOURCE_DIR}/icone.png"
 )
 
 # Embed binary assets (Splash, Icons, etc.)
 juce_add_binary_data(TridjsAssets
     SOURCES
-        "C:/TridjsMIDI/splash2.png"
+        "${CMAKE_SOURCE_DIR}/splash2.png"
 )
 
 juce_generate_juce_header(TridjsLiveSuite)
@@ -106,6 +106,8 @@ target_sources(TridjsLiveSuite
         Source/Controllers/Professional/Mixxx/MixxxJSEngine.h
         Source/Controllers/MockAudioEngine.h
         Source/Controllers/ControllerSandboxWindow.h
+        Source/Controllers/ControllerManagerWindow.h
+        Source/ResourceHelper.h
         Source/HandFreeComponent.cpp
         Source/HandFreeComponent.h
         Source/TridjsLookAndFeel.cpp
@@ -201,6 +203,14 @@ add_custom_command(TARGET TridjsLiveSuite POST_BUILD
     "${CMAKE_SOURCE_DIR}/lang"
     "$<TARGET_FILE_DIR:TridjsLiveSuite>/lang"
     COMMENT "Copying lang/ translations to output directory"
+)
+
+# Copiar pasta Mappings/ (controladores MIDI) para ao lado do executável após a build
+add_custom_command(TARGET TridjsLiveSuite POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/Source/Controllers/Mappings"
+    "$<TARGET_FILE_DIR:TridjsLiveSuite>/Mappings"
+    COMMENT "Copying MIDI controller mappings to output directory"
 )
 
 # Adicionar fontes do STK diretamente se necessário ou via target

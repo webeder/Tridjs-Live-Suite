@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "Controllers/ControllerSandboxWindow.h"
 #include "LanguageManager.h"
+#include "ResourceHelper.h"
 
 MainComponent::MainComponent() 
     : rgbManager (inputManager.getSerialManager()),
@@ -386,7 +387,6 @@ MainComponent::MainComponent()
       bool hasMetadata = trackDb.getTrackByPath(file.getFullPathName(), t);
       
       if (currentMode == LayoutMode::HandFree) {
-          // Always update the waveform display for HandsFree mode
           handFreeComp->header.waveformDisplay.loadedTrackName = file.getFileNameWithoutExtension();
           audioEngine.setDeckCuePoint(2, 0.0);
           handFreeComp->header.waveformDisplay.isPlaying = false;
@@ -395,9 +395,9 @@ MainComponent::MainComponent()
           if (hasMetadata) audioEngine.loadMainTrack(file, t.bpm);
           else audioEngine.loadMainTrack(file);
       } else {
-          // Mixer Mode: load into Deck A on double-click
           audioEngine.loadDeckA(file, hasMetadata ? t.bpm : 0.0);
       }
+      analysisManager.queueTrack(file);
   };
 
 
@@ -1003,9 +1003,9 @@ void MainComponent::handleMasterRecordingFinalization(const juce::File& tempFile
             
             if (!fileName.endsWithIgnoreCase(".wav")) fileName += ".wav";
 
-            // Pasta base especificada pelo usuário (%USERPROFILE%\Music\tridjs_lifeStudio\Recordings)
+            // Pasta base especificada pelo usuário (%USERPROFILE%\Music\tridjsLiveSuite\Recordings)
             juce::File targetDir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
-                                    .getChildFile("tridjs_lifeStudio")
+                                    .getChildFile("tridjsLiveSuite")
                                     .getChildFile("Recordings");
             
             // Pasta dinâmica por data
@@ -1086,17 +1086,16 @@ void MainComponent::loadControllerMapping(const juce::File& mappingFile)
 
 void MainComponent::loadFlx10Mapping()
 {
-    auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    
     // First try the user documents folder
     auto mappingFile = persistence.getMappingsFolder().getChildFile("Pioneer-DDJ-FLX10.midi.xml");
     
-    // Fallback to internal resources
+    // Fallback to bundled mappings
     if (!mappingFile.existsAsFile())
-        mappingFile = appDir.getParentDirectory().getChildFile("Source").getChildFile("Controllers").getChildFile("Mappings").getChildFile("FLX10").getChildFile("Pioneer-DDJ-FLX10.midi.xml");
-
-    if (!mappingFile.existsAsFile())
-        mappingFile = juce::File("C:\\tridjs\\Tridjs-Live-Suite-main\\Source\\Controllers\\Mappings\\FLX10\\Pioneer-DDJ-FLX10.midi.xml");
+    {
+        auto mappingsDir = findMappingsDir();
+        if (mappingsDir.exists())
+            mappingFile = mappingsDir.getChildFile("FLX10").getChildFile("Pioneer-DDJ-FLX10.midi.xml");
+    }
 
     loadControllerMapping(mappingFile);
 }

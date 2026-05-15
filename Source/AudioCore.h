@@ -303,7 +303,7 @@ private:
     PluginScannerManager vstManager;
     VocalVstChain vocalVstChain { vstManager.getFormatManager() };
 
-    // ONNX Runtime for Demucs
+    // ONNX Runtime for Demucs (reserved)
     static constexpr int NUM_FX = 6;
     std::unique_ptr<Ort::Env> ortEnv;
     std::unique_ptr<Ort::Session> ortSession;
