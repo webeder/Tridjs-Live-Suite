@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include <vector>
 #include "../LanguageManager.h"
+#include "../ResourceHelper.h"
 
 /**
  * ControllerManagerWindow
@@ -575,11 +576,14 @@ public:
         void refreshList()
         {
             mappingFiles.clear();
+            
+            // 1. User documents folder (user-installed mappings)
             mappingFiles.addArray(targetFolder.findChildFiles(juce::File::findFiles, true, "*.midi.xml"));
             
-            auto internalAlt = juce::File("C:\\TridjsMIDI\\Source\\Controllers\\Mappings");
-            if (internalAlt.exists())
-                mappingFiles.addArray(internalAlt.findChildFiles(juce::File::findFiles, true, "*.midi.xml"));
+            // 2. Bundled mappings (deployed next to exe or dev source tree)
+            auto bundledDir = findMappingsDir();
+            if (bundledDir.exists())
+                mappingFiles.addArray(bundledDir.findChildFiles(juce::File::findFiles, true, "*.midi.xml"));
 
             // Remove duplicates
             for (int i = mappingFiles.size(); --i >= 0;)
@@ -601,7 +605,17 @@ public:
             fileChooser->launchAsync(juce::FileBrowserComponent::openMode, [this](const juce::FileChooser& fc) {
                 auto file = fc.getResult();
                 if (file.existsAsFile()) {
-                    file.copyFileTo(targetFolder.getChildFile(file.getFileName()));
+                    auto targetFile = targetFolder.getChildFile(file.getFileName());
+                    file.copyFileTo(targetFile);
+
+                    // Copy companion JS script if present
+                    auto copyJs = [&](const juce::File& jsFile) {
+                        if (jsFile.existsAsFile())
+                            jsFile.copyFileTo(targetFolder.getChildFile(jsFile.getFileName()));
+                    };
+                    copyJs(file.withFileExtension("js"));
+                    copyJs(file.getParentDirectory().getChildFile(file.getFileNameWithoutExtension() + "-script.js"));
+
                     refreshList();
                 }
             });

@@ -7,7 +7,7 @@
     </info>
     <controller id="DDJ-1000">
         <scriptfiles>
-            <file functionprefix="PioneerDDJ1000" filename="Pioneer-DDJ_1000-scripts.js"/>
+            <file functionprefix="PioneerDDJ1000" filename="Pioneer-DDJ-1000-script.js"/>
         </scriptfiles>
         <controls>
             <control>

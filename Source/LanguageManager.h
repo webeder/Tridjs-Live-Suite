@@ -70,11 +70,12 @@ public:
         auto d2 = juce::File::getCurrentWorkingDirectory().getChildFile("lang");
         if (d2.exists()) return d2;
 
-        // 3. Absolute fallback
-        auto d3 = juce::File("C:\\TridjsMIDI\\lang");
+        // 3. Source-tree fallback (development)
+        auto d3 = exeDir.getParentDirectory().getParentDirectory()
+                       .getChildFile("Tridjs-Live-Suite-main").getChildFile("lang");
         if (d3.exists()) return d3;
 
-        // 4. Source-tree fallback
+        // 4. Source-tree fallback (legacy)
         auto d4 = exeDir.getParentDirectory().getParentDirectory()
                          .getParentDirectory().getParentDirectory()
                          .getChildFile("lang");

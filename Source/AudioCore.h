@@ -105,6 +105,12 @@ public:
     bool isSmartFaderEnabled() const { return smartFaderEnabled; }
     void handleSmartFader();
 
+    // MTempo (Master Tempo / Quantize)
+    void setMTempoEnabled (bool enabled);
+    bool isMTempoEnabled() const { return mTempoEnabled; }
+    void alignBeatToPlayingDeck (int targetDeckIdx);
+    void keepBeatsAligned();
+
     // Volume Controls (0.0 to 1.0)
     void setMasterVolume (float vol);
     void setTrackVolume (float vol); // Deprecated but kept for compatibility
@@ -232,6 +238,7 @@ private:
     float trackVolume = 1.0f;
     float crossfaderPos = 0.5f;
     std::atomic<bool> smartFaderEnabled { false };
+    std::atomic<bool> mTempoEnabled { true };
 
     struct DeckMixerState {
         float gain = 1.0f;

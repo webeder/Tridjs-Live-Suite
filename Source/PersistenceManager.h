@@ -22,7 +22,7 @@ public:
     juce::File getMappingsFolder()
     {
         return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-            .getChildFile("tridjs_lifeStudio")
+            .getChildFile("tridjsLiveSuite")
             .getChildFile("Mappings");
     }
 

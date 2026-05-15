@@ -101,6 +101,92 @@ void AudioCore::setCrossfaderPosition (float pos) { crossfaderPos = pos; }
 
 void AudioCore::setSmartFaderEnabled (bool enabled) {
     smartFaderEnabled = enabled;
+    if (enabled) {
+        setSyncEnabled(0, true);
+        setSyncEnabled(1, true);
+    } else {
+        setSyncEnabled(0, false);
+        setSyncEnabled(1, false);
+    }
+}
+
+void AudioCore::setMTempoEnabled (bool enabled) {
+    mTempoEnabled = enabled;
+}
+
+void AudioCore::alignBeatToPlayingDeck (int targetDeckIdx) {
+    if (!mTempoEnabled) return;
+
+    int playingDeck = -1;
+    for (int i = 0; i < 2; ++i)
+        if (isDeckPlaying(i)) { playingDeck = i; break; }
+    if (playingDeck < 0 || targetDeckIdx == playingDeck) return;
+
+    double bpm = getDeckBpm(playingDeck);
+    if (bpm < 20.0) return;
+    double beatLen = 60.0 / bpm;
+    double barLen = beatLen * 4.0;
+
+    // Get downbeat offset from analysis DB
+    double downbeatOffset = 0.0;
+    juce::String targetPath = (targetDeckIdx == 0) ? deckAPath : deckBPath;
+    if (trackDb != nullptr) {
+        TrackDatabase::Track t;
+        if (trackDb->getTrackByPath(targetPath, t)) {
+            TrackDatabase::Analysis a;
+            if (trackDb->loadAnalysis(t.id, a) && a.beatgrid.isNotEmpty()) {
+                auto json = juce::JSON::parse(a.beatgrid);
+                if (auto* markers = json.getArray()) {
+                    for (auto& m : *markers) {
+                        if (m["type"].toString() == "downbeat") {
+                            downbeatOffset = (double)m["pos"];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Alinhar: posicionar target deck no mesmo ponto do compasso do playing deck
+    double playingPos = getDeckPosition(playingDeck);
+    double relPos = std::fmod(playingPos, barLen);
+    if (relPos < 0) relPos += barLen;
+
+    auto* transport = (targetDeckIdx == 0) ? deckAChannel->transport.get()
+                    : deckBChannel->transport.get();
+    if (transport == nullptr) return;
+
+    transport->setPosition(downbeatOffset + relPos);
+}
+
+void AudioCore::keepBeatsAligned() {
+    if (!mTempoEnabled) return;
+    if (!isDeckPlaying(0) || !isDeckPlaying(1)) return;
+
+    double bpm = getDeckBpm(0);
+    if (bpm < 20.0) return;
+    double barLen = 60.0 / bpm * 4.0;
+
+    double posA = getDeckPosition(0);
+    double posB = getDeckPosition(1);
+
+    // Compute phase within bar (0 to barLen)
+    double phaseA = std::fmod(posA, barLen);
+    double phaseB = std::fmod(posB, barLen);
+    if (phaseA < 0) phaseA += barLen;
+    if (phaseB < 0) phaseB += barLen;
+
+    // If phases drift by more than 1/8 beat, snap B to A's phase
+    double snapThreshold = barLen / 32.0; // 1/32 of bar
+    double diff = phaseB - phaseA;
+    if (diff > barLen * 0.5) diff -= barLen;
+    else if (diff < -barLen * 0.5) diff += barLen;
+
+    if (std::abs(diff) > snapThreshold) {
+        double targetB = posB - diff;
+        deckBChannel->transport->setPosition(targetB);
+    }
 }
 
 void AudioCore::handleSmartFader() {
@@ -579,7 +665,7 @@ bool AudioCore::loadDeckA(const juce::File& file, double bpm) {
         
         mainTrackBpm = deckABpm;
         thumbnail.setSource(new juce::FileInputSource(file));
-        // Mixer decks do not use stems
+        alignBeatToPlayingDeck(0);
         return true;
     }
     return false;
@@ -617,6 +703,7 @@ bool AudioCore::loadDeckB(const juce::File& file, double bpm) {
         deckBBpm = bpm;
         
         thumbnailB.setSource(new juce::FileInputSource(file));
+        alignBeatToPlayingDeck(1);
         return true;
     }
     return false;

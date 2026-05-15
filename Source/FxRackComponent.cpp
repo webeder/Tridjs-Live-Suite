@@ -1,6 +1,7 @@
 #include "FxRackComponent.h"
 #include "LanguageManager.h"
 #include "SerialManager.h"
+#include "ResourceHelper.h"
 
 FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   // Setup Tabs
@@ -26,13 +27,13 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
                       juce::Colours::lightgrey);
 
   diskIcon =
-      juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\disk.png"));
+      juce::ImageFileFormat::loadFrom(findResourceFile("disk.png"));
   openIcon =
-      juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\open.png"));
+      juce::ImageFileFormat::loadFrom(findResourceFile("open.png"));
 
   // ===== CONFIG TAB =====
   configIcon =
-      juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\config.png"));
+      juce::ImageFileFormat::loadFrom(findResourceFile("config.png"));
   deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
       deviceManager, 0, 2, 2, 2, true, true, true, true);
   

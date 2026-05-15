@@ -8,7 +8,7 @@
     </info>
     <controller id="PIONEER">
         <scriptfiles>
-            <file functionprefix="PioneerDDJSB" filename="Pioneer-DDJ-SB-scripts.js"/>
+            <file functionprefix="PioneerDDJSB" filename="Pioneer-DDJ-SB-script.js"/>
         </scriptfiles>
         <controls>
             <control>

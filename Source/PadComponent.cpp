@@ -1,10 +1,11 @@
 #include "PadComponent.h"
+#include "ResourceHelper.h"
 
 PadComponent::PadComponent (int padIndex) : index (padIndex)
 {
-    micIcon = juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\mic.png"));
-    loopIcon = juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\loop.png"));
-    ejectIcon = juce::ImageFileFormat::loadFrom(juce::File("C:\\TridjsMIDI\\ejt.png"));
+    micIcon = juce::ImageFileFormat::loadFrom(findResourceFile("mic.png"));
+    loopIcon = juce::ImageFileFormat::loadFrom(findResourceFile("loop.png"));
+    ejectIcon = juce::ImageFileFormat::loadFrom(findResourceFile("ejt.png"));
 
     recordBtn.setImages(false, true, true, micIcon, 1.0f, {}, micIcon, 1.0f, juce::Colours::white.withAlpha(0.2f), micIcon, 1.0f, juce::Colours::red.withAlpha(0.6f));
     recordBtn.onClick = [this] {

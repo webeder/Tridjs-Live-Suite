@@ -1,20 +1,45 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "../../../Core/ControllerProfile.h"
+#include <map>
+#include "../../../Core/MixxxMappingParser.h"
 
-// Stub for parsing Mixxx XML mappings
-class MixxxMappingParser
+// Professional Mixxx mapping parser.
+// Delegates to the Core parser for XML loading and control lookup.
+class ProfessionalMixxxMappingParser
 {
 public:
-    MixxxMappingParser() = default;
-    
-    bool loadMapping(const juce::File& xmlFile)
+    ProfessionalMixxxMappingParser() = default;
+
+    bool loadMapping(const juce::File& xmlFile, bool parseScripts = false)
     {
-        // TODO: Parse Mixxx XML to extract MIDI bindings and JS files
-        return false;
+        if (!xmlFile.existsAsFile())
+            return false;
+
+        bool ok = coreParser.loadXml(xmlFile);
+
+        if (ok && parseScripts)
+            scriptFile = xmlFile.getParentDirectory().getChildFile(
+                xmlFile.getFileNameWithoutExtension() + "-script.js");
+
+        return ok;
     }
 
+    MixxxControl getControl(int status, int midino) const
+    {
+        return coreParser.getControl(status, midino);
+    }
+
+    size_t getMappingCount() const
+    {
+        return coreParser.getMappingCount();
+    }
+
+    juce::File getScriptFile() const { return scriptFile; }
+
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixxxMappingParser)
+    MixxxMappingParser coreParser;
+    juce::File scriptFile;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProfessionalMixxxMappingParser)
 };

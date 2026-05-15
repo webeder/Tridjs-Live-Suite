@@ -71,7 +71,8 @@ void AnalysisManager::analyzeNext() {
   generateWaveformData(reader.get(), a.waveform);
   currentProgress = 0.4f;
 
-  a.beatgrid = "{\"version\":1,\"markers\":[]}";
+  // Detect downbeat position (first strong beat after quantization)
+  a.beatgrid = detectDownbeat(reader.get(), t.bpm);
 
   generateStems(reader.get(), trackId, file.getFullPathName(), a);
   currentProgress = 1.0f;
@@ -327,6 +328,67 @@ float AnalysisManager::getAnalysisProgress(const juce::String &path) {
   if (juce::File(currentAnalyzingPath) == juce::File(path))
     return currentProgress;
   return -1.0f;
+}
+
+// ── Downbeat detection ─────────────────────────────────
+juce::String AnalysisManager::detectDownbeat(juce::AudioFormatReader *reader, double bpm) {
+  if (reader == nullptr || bpm < 20.0) return "{\"version\":1,\"markers\":[]}";
+  double sr = reader->sampleRate;
+  int totalSamples = (int)reader->lengthInSamples;
+  if (totalSamples < (int)(sr * 1.0)) return "{\"version\":1,\"markers\":[]}";
+
+  int analysisLen = juce::jmin(totalSamples, (int)(sr * 8.0));
+  int beatSamples = (int)(sr * 60.0 / bpm);
+  int barSamples = beatSamples * 4;
+  int numBars = analysisLen / barSamples;
+  if (numBars < 2) return "{\"version\":1,\"markers\":[]}";
+
+  // Mono mix + downsample
+  int decim = (int)(sr / 2000.0);
+  if (decim < 1) decim = 1;
+  int dsLen = analysisLen / decim;
+  int dsBarSamples = barSamples / decim;
+
+  int rawCh = reader->numChannels;
+  if (rawCh > 2) rawCh = 2;
+  juce::AudioBuffer<float> raw(rawCh, analysisLen);
+  raw.clear();
+  reader->read(&raw, 0, analysisLen, 0, true, true);
+
+  std::vector<float> energy(static_cast<size_t>(numBars * 4), 0.0f);
+  for (int bar = 0; bar < numBars; ++bar) {
+    for (int beat = 0; beat < 4; ++beat) {
+      float maxE = 0.0f;
+      for (int s = 0; s < beatSamples; s += decim) {
+        int idx = bar * barSamples + beat * beatSamples + s;
+        if (idx < analysisLen) {
+          float sum = 0.0f;
+          for (int c = 0; c < rawCh; ++c) sum += std::abs(raw.getSample(c, idx));
+          if (sum > maxE) maxE = sum;
+        }
+      }
+      energy[static_cast<size_t>(bar * 4 + beat)] = maxE;
+    }
+  }
+
+  // Find which beat position has the most energy across all bars
+  std::vector<float> beatProfile(4, 0.0f);
+  for (int bar = 0; bar < numBars; ++bar)
+    for (int beat = 0; beat < 4; ++beat)
+      beatProfile[static_cast<size_t>(beat)] += energy[static_cast<size_t>(bar * 4 + beat)];
+
+  // The downbeat (beat 0) should have the strongest energy in most music
+  // If another beat is consistently stronger, adjust the offset
+  int maxBeat = 0;
+  for (int b = 1; b < 4; ++b)
+    if (beatProfile[static_cast<size_t>(b)] > beatProfile[static_cast<size_t>(maxBeat)])
+      maxBeat = b;
+
+  // firstDownbeatOffset = how many samples from start to first downbeat
+  int firstDownbeatSample = maxBeat * beatSamples;
+  double firstDownbeatSec = (double)firstDownbeatSample / sr;
+
+  return "{\"version\":1,\"markers\":[{\"pos\":" + juce::String(firstDownbeatSec, 3) + ",\"type\":\"downbeat\"}]}";
 }
 
 void AnalysisManager::generateStems(juce::AudioFormatReader *reader,

@@ -1,5 +1,6 @@
 #include "FooterComponent.h"
 #include "LanguageManager.h"
+#include "ResourceHelper.h"
 
 FooterComponent::FooterComponent()
 {
@@ -27,7 +28,7 @@ FooterComponent::FooterComponent()
     startTimer(50); // 50ms pulse refresh rate
 
     // Load App Icon
-    juce::File iconFile("C:\\TridjsMIDI\\icone.png");
+    juce::File iconFile = findResourceFile("icone.png");
     if (iconFile.existsAsFile())
         appIcon = juce::ImageFileFormat::loadFrom(iconFile);
 

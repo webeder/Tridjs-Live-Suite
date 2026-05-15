@@ -684,6 +684,24 @@ public:
                 on ? juce::Colour(0xffddcc00) : juce::Colour(0x66ffff00));
             repaint();
         };
+
+        content.addAndMakeVisible(mTempoBtn);
+        mTempoBtn.setButtonText("mt");
+        mTempoBtn.setClickingTogglesState(true);
+        mTempoBtn.setToggleState(true, juce::dontSendNotification);
+        mTempoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x55cc2222));
+        mTempoBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffdd2222));
+        mTempoBtn.setColour(juce::TextButton::textColourOffId, juce::Colour(0x66dd2222));
+        mTempoBtn.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+        mTempoBtn.onClick = [this] {
+            bool on = mTempoBtn.getToggleState();
+            audioCore.setMTempoEnabled(on);
+            mTempoBtn.setColour(juce::TextButton::buttonColourId,
+                on ? juce::Colour(0xffdd2222) : juce::Colour(0x55cc2222));
+            mTempoBtn.setColour(juce::TextButton::textColourOffId,
+                on ? juce::Colour(0xffdd2222) : juce::Colour(0x66dd2222));
+            repaint();
+        };
         crossfader.setRange(0.0, 1.0);
         crossfader.setValue(0.5);
         
@@ -892,6 +910,7 @@ public:
 
         crossfader.setBounds((w - 480) / 2, h - 80, 400, 50);
         smartFaderBtn.setBounds(crossfader.getRight() + 12, h - 82, 56, 56);
+        mTempoBtn.setBounds(smartFaderBtn.getRight() + 8, h - 82, 56, 56);
 
         // Posicionar controles de Mic e VST mais à ESQUERDA (no espaço indicado no print)
         int cfY = h - 85;
@@ -1292,6 +1311,7 @@ public:
     juce::Slider faderA, faderB, crossfader;
     juce::TextButton cueA, cueB;
     juce::TextButton smartFaderBtn;
+    juce::TextButton mTempoBtn;
     MicControlWidget micControl;
     VstControlWidget vstControl;
 
@@ -1429,6 +1449,7 @@ private:
         void timerCallback() override {
             owner.audioCore.handleSyncLogic();
             owner.audioCore.handleSmartFader();
+            owner.audioCore.keepBeatsAligned();
         }
     } syncTimer;
 

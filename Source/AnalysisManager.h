@@ -44,6 +44,7 @@ private:
   void generateStems(juce::AudioFormatReader *reader, int trackId,
                      const juce::String &originalPath,
                      TrackDatabase::Analysis &analysis);
+  juce::String detectDownbeat(juce::AudioFormatReader *reader, double bpm);
 
 private:
   float currentProgress = 0.0f;
