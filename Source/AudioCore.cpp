@@ -99,6 +99,14 @@ void AudioCore::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 
 void AudioCore::setCrossfaderPosition (float pos) { crossfaderPos = pos; }
 
+void AudioCore::setSmartFaderEnabled (bool enabled) {
+    smartFaderEnabled = enabled;
+    if (enabled) {
+        setSyncEnabled(0, true);
+        setSyncEnabled(1, true);
+    }
+}
+
 void AudioCore::setDeckGain(int deckIdx, float gain) {
     auto& state = (deckIdx == 0) ? deckAState : (deckIdx == 1 ? deckBState : deckHState);
     state.gain = gain;
@@ -276,10 +284,29 @@ void AudioCore::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToF
     // 2. Mix Decks into Master Buffer with DJ Crossfader Curve
     bufferToFill.clearActiveBufferRegion();
     
-    // "Full-Center" curve: both decks at 1.0 in the middle (0.5)
-    // This prevents the volume dip at center point.
-    float crossA = std::min(1.0f, 2.0f * (1.0f - crossfaderPos));
-    float crossB = std::min(1.0f, 2.0f * crossfaderPos);
+    float crossA, crossB;
+    if (smartFaderEnabled && crossfaderPos > 0.01f && crossfaderPos < 0.99f) {
+        // Smart Fader: smooth curves + auto EQ based on crossfader position
+        float pos = crossfaderPos;
+        // Non-linear volume curve (S-curve)
+        float sCurve = pos * pos * (3.0f - 2.0f * pos); // smoothstep
+        crossA = 1.0f - sCurve;
+        crossB = sCurve;
+
+        // Auto EQ: cut lows on outgoing, gentle roll on highs
+        float eqAScoop = (1.0f - sCurve) * 0.3f; // outgoing loses lows
+        float eqBScoop = sCurve * 0.3f;
+        deckAState.eqLow = -eqAScoop * 12.0f;
+        deckAState.eqMid = -eqAScoop * 4.0f;
+        deckBState.eqLow = -eqBScoop * 12.0f;
+        deckBState.eqMid = -eqBScoop * 4.0f;
+        updateEQFilters(0);
+        updateEQFilters(1);
+    } else {
+        // Normal crossfader
+        crossA = std::min(1.0f, 2.0f * (1.0f - crossfaderPos));
+        crossB = std::min(1.0f, 2.0f * crossfaderPos);
+    }
     
     mainBuffer->addFrom(0, start, deckAChannel->processingBuffer, 0, 0, num, crossA);
     mainBuffer->addFrom(1, start, deckAChannel->processingBuffer, 1, 0, num, crossA);

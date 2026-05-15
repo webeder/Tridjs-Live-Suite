@@ -100,6 +100,10 @@ public:
     void setDeckPitch (int deckIdx, double pitch);
     double getDeckPitch (int deckIdx) const;
     
+    // Smart Fader
+    void setSmartFaderEnabled (bool enabled);
+    bool isSmartFaderEnabled() const { return smartFaderEnabled; }
+
     // Volume Controls (0.0 to 1.0)
     void setMasterVolume (float vol);
     void setTrackVolume (float vol); // Deprecated but kept for compatibility
@@ -226,6 +230,7 @@ private:
     float masterVolume = 1.0f;
     float trackVolume = 1.0f;
     float crossfaderPos = 0.5f;
+    std::atomic<bool> smartFaderEnabled { false };
 
     struct DeckMixerState {
         float gain = 1.0f;

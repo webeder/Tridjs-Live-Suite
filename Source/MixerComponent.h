@@ -667,6 +667,23 @@ public:
         crossfader.setSliderStyle(juce::Slider::LinearHorizontal);
         crossfader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
         crossfader.onValueChange = [this] { audioCore.setCrossfaderPosition((float)crossfader.getValue()); };
+
+        content.addAndMakeVisible(smartFaderBtn);
+        smartFaderBtn.setButtonText("smart");
+        smartFaderBtn.setClickingTogglesState(true);
+        smartFaderBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0x55bbbb00));
+        smartFaderBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffffdd00));
+        smartFaderBtn.setColour(juce::TextButton::textColourOffId, juce::Colour(0x66ffff00));
+        smartFaderBtn.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+        smartFaderBtn.onClick = [this] {
+            bool on = smartFaderBtn.getToggleState();
+            audioCore.setSmartFaderEnabled(on);
+            smartFaderBtn.setColour(juce::TextButton::buttonColourId,
+                on ? juce::Colour(0xffddcc00) : juce::Colour(0x55bbbb00));
+            smartFaderBtn.setColour(juce::TextButton::textColourOffId,
+                on ? juce::Colour(0xffddcc00) : juce::Colour(0x66ffff00));
+            repaint();
+        };
         crossfader.setRange(0.0, 1.0);
         crossfader.setValue(0.5);
         
@@ -873,7 +890,8 @@ public:
         // Right Column (Side Knobs B)
         layoutKnobCol(knobsB, curX, mainY, sideW, mainH);
 
-        crossfader.setBounds((w - 400) / 2, h - 80, 400, 50);
+        crossfader.setBounds((w - 480) / 2, h - 80, 400, 50);
+        smartFaderBtn.setBounds(crossfader.getRight() + 12, h - 82, 56, 56);
 
         // Posicionar controles de Mic e VST mais à ESQUERDA (no espaço indicado no print)
         int cfY = h - 85;
@@ -1273,6 +1291,7 @@ public:
     juce::OwnedArray<juce::Slider> knobsA, knobsB;
     juce::Slider faderA, faderB, crossfader;
     juce::TextButton cueA, cueB;
+    juce::TextButton smartFaderBtn;
     MicControlWidget micControl;
     VstControlWidget vstControl;
 
