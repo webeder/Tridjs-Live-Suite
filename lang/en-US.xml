@@ -79,6 +79,17 @@
     <entry key="FX_SERIAL_PORT" value="SERIAL PORT (115200)"/>
     <entry key="FX_LEARN" value="LEARN"/>
     
+    <!-- Header / Mixer Labels -->
+    <entry key="MIXER_VOL_TRACK" value="VOL TRACK"/>
+
+    <!-- FX Rack Tabs -->
+    <entry key="TAB_FX" value="FX"/>
+    <entry key="TAB_FX_TOUCH" value="FX TOUCH"/>
+    <entry key="TAB_RGB" value="RGB"/>
+    <entry key="TAB_LEARN" value="LEARN"/>
+    <entry key="TAB_SERIAL" value="SERIAL"/>
+    <entry key="TAB_CONFIG" value="CONFIG"/>
+
     <!-- Footer -->
     <entry key="FOOTER_MASTER_BPM" value="MASTER BPM"/>
 

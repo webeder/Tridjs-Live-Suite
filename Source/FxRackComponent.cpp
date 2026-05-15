@@ -29,14 +29,12 @@ static juce::Image createFAIcon(int glyph, int size)
 FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   // Setup Tabs
   addAndMakeVisible(tabs);
-  tabs.addTab("FX", juce::Colours::transparentBlack, &effectsContent, false);
-  tabs.addTab("FX TOUCH", juce::Colours::transparentBlack, &touchTabContent,
-              false);
-  tabs.addTab("RGB", juce::Colours::transparentBlack, &rgbContent, false);
-  tabs.addTab("LEARN", juce::Colours::transparentBlack, &midiLearnContent,
-              false);
-  tabs.addTab("SERIAL", juce::Colours::transparentBlack, &serialContent, false);
-  tabs.addTab("CONFIG", juce::Colours::transparentBlack, &configContent, false);
+  tabs.addTab(TJS_L("TAB_FX"), juce::Colours::transparentBlack, &effectsContent, false);
+  tabs.addTab(TJS_L("TAB_FX_TOUCH"), juce::Colours::transparentBlack, &touchTabContent, false);
+  tabs.addTab(TJS_L("TAB_RGB"), juce::Colours::transparentBlack, &rgbContent, false);
+  tabs.addTab(TJS_L("TAB_LEARN"), juce::Colours::transparentBlack, &midiLearnContent, false);
+  tabs.addTab(TJS_L("TAB_SERIAL"), juce::Colours::transparentBlack, &serialContent, false);
+  tabs.addTab(TJS_L("TAB_CONFIG"), juce::Colours::transparentBlack, &configContent, false);
 
   LanguageManager::getInstance().addChangeListener(this);
   updateLanguage();
@@ -181,8 +179,9 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   for (int i = 0; i < 9; ++i)
     rowNames.add("PAD " + juce::String(i + 1) + " RECORD"); // 41-49
 
+  auto learnIcon = createFAIcon(0xf19d, 20); // fa-graduation-cap
   for (int i = 0; i < rowNames.size(); ++i) {
-    auto row = std::make_unique<MidiMappingRow>(rowNames[i]);
+    auto row = std::make_unique<MidiMappingRow>(rowNames[i], learnIcon);
     int localIdx = i;
     row->onLearnToggled = [this, localIdx](bool isOn) {
       // Turn off all others when one is toggled on

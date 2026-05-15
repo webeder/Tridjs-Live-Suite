@@ -297,7 +297,7 @@ public:
     class MidiMappingRow : public juce::Component
     {
     public:
-        MidiMappingRow(const juce::String& lblName) {
+        MidiMappingRow(const juce::String& lblName, const juce::Image& learnIcon) {
             setName(lblName);
             label.setText(lblName, juce::dontSendNotification);
             valueBox.setText("---", juce::dontSendNotification);
@@ -305,8 +305,7 @@ public:
             label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
             valueBox.setColour(juce::Label::textColourId, juce::Colours::cyan);
             valueBox.setJustificationType(juce::Justification::centred);
-            learnBtn.setColour(juce::TextButton::buttonColourId, juce::Colour((juce::uint32)0xff333333));
-            learnBtn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::orange);
+            learnBtn.setImages(false, true, true, learnIcon, 1.0f, {}, learnIcon, 1.0f, juce::Colours::white.withAlpha(0.3f), learnIcon, 1.0f, juce::Colours::orange.withAlpha(0.6f));
             learnBtn.setClickingTogglesState(true);
             learnBtn.onClick = [this] { if (onLearnToggled) onLearnToggled(learnBtn.getToggleState()); };
             valueBox.onTextChange = [this] { if (onManualEntry) onManualEntry(valueBox.getText()); };
@@ -320,7 +319,7 @@ public:
         bool isLearning() const { return learnBtn.getToggleState(); }
         void resized() override {
             auto area = getLocalBounds().reduced(0, 2);
-            label.setBounds(area.removeFromLeft(120)); // Aumentado para não esmagar o texto
+            label.setBounds(area.removeFromLeft(120));
             clearBtn.setBounds(area.removeFromRight(20).reduced(0, 5));
             learnBtn.setBounds(area.removeFromRight(50).reduced(0, 2));
             valueBox.setBounds(area);
@@ -328,12 +327,10 @@ public:
         std::function<void(bool)> onLearnToggled;
         std::function<void(const juce::String&)> onManualEntry;
         std::function<void()> onClear;
-        void updateLanguage() {
-            learnBtn.setButtonText(TJS_L("FX_LEARN"));
-        }
+        void updateLanguage() {}
     private:
         juce::Label label; juce::Label valueBox;
-        juce::TextButton learnBtn { "" }; juce::TextButton clearBtn { "X" };
+        juce::ImageButton learnBtn; juce::TextButton clearBtn { "X" };
     };
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
