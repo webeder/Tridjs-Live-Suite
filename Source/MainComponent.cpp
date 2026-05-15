@@ -1080,7 +1080,14 @@ void MainComponent::showControllerManager()
     {
         controllerManagerWindow = std::make_unique<ControllerManagerWindow>(
             persistence.getMappingsFolder(),
-            [this](const juce::File& f) { loadControllerMapping(f); }
+            [this](const juce::File& f) { loadControllerMapping(f); },
+            &midiMappings,
+            [this](int row, const juce::String& id) {
+                if (id.isEmpty()) midiMappings.erase(row);
+                else midiMappings[row] = id;
+                saveAllSettings();
+                handFreeComp->fxRack.updateMappingDisplay(row, id);
+            }
         );
     }
     controllerManagerWindow->setVisible(true);

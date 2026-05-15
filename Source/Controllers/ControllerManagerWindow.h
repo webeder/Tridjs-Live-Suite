@@ -2,8 +2,10 @@
 
 #include <JuceHeader.h>
 #include <vector>
+#include <map>
 #include "../LanguageManager.h"
 #include "../ResourceHelper.h"
+#include "BinaryData.h"
 
 /**
  * ControllerManagerWindow
@@ -18,7 +20,9 @@ public:
     {
     public:
         ContentComponent(const juce::File& mappingsDir, 
-                        std::function<void(const juce::File&)> onActivate)
+                        std::function<void(const juce::File&)> onActivate,
+                        std::map<int, juce::String>* mappingData = nullptr,
+                        std::function<void(int, const juce::String&)> onMappingUpdate = nullptr)
             : targetFolder(mappingsDir), onActivateCallback(onActivate)
         {
             // Sidebar Navigation
@@ -52,6 +56,51 @@ public:
             viewport.setScrollBarsShown(true, false);
             viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, accentColor.withAlpha(0.3f));
             addAndMakeVisible(viewport);
+
+            // Mapping viewport for Config tab
+            mappingViewport.setViewedComponent(&mappingContent, false);
+            mappingViewport.setScrollBarsShown(true, false);
+            mappingViewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, accentColor.withAlpha(0.3f));
+            addAndMakeVisible(mappingViewport);
+            mappingViewport.setVisible(false);
+
+            // Mapping search box
+            mappingSearchBox.setTextToShowWhenEmpty("", juce::Colours::grey.withAlpha(0.4f));
+            mappingSearchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff0a0a0a));
+            mappingSearchBox.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff333333));
+            mappingSearchBox.setJustification(juce::Justification::centred);
+            mappingSearchBox.onTextChange = [this] { filterMappingRows(); };
+            addAndMakeVisible(mappingSearchBox);
+            mappingSearchBox.setVisible(false);
+
+            if (mappingData != nullptr)
+            {
+                auto makeFAIcon = [](int glyph) {
+                    juce::Image img(juce::Image::ARGB, 20, 20, true);
+                    juce::Graphics g(img);
+                    g.setColour(juce::Colours::white);
+                    g.setFont(juce::Font(juce::Typeface::createSystemTypefaceFor(
+                        BinaryData::fasolid900_ttf, BinaryData::fasolid900_ttfSize)).withHeight(14.0f));
+                    g.drawText(juce::String::charToString((juce::juce_wchar)glyph),
+                               img.getBounds(), juce::Justification::centred);
+                    return img;
+                };
+                auto learnImg = makeFAIcon(0xf19d);
+                auto saveImg = makeFAIcon(0xf0c7);
+                auto openImg = makeFAIcon(0xf07c);
+
+                mappingSaveBtn.setImages(false, true, true, saveImg, 1.0f, {}, saveImg, 1.0f, juce::Colours::white.withAlpha(0.2f), saveImg, 1.0f, juce::Colours::cyan.withAlpha(0.6f));
+                mappingSaveBtn.setTooltip("Save Mapping");
+                addAndMakeVisible(mappingSaveBtn);
+                mappingSaveBtn.setVisible(false);
+
+                mappingOpenBtn.setImages(false, true, true, openImg, 1.0f, {}, openImg, 1.0f, juce::Colours::white.withAlpha(0.2f), openImg, 1.0f, juce::Colours::cyan.withAlpha(0.6f));
+                mappingOpenBtn.setTooltip("Open Mapping");
+                addAndMakeVisible(mappingOpenBtn);
+                mappingOpenBtn.setVisible(false);
+
+                buildMappingRows(learnImg, *mappingData, onMappingUpdate);
+            }
 
             refreshList();
             
@@ -178,11 +227,6 @@ public:
             g.setFont(juce::Font("Inter", 30.0f, juce::Font::bold));
             g.drawText(titleStr, contentArea.removeFromTop(45), juce::Justification::centredLeft);
             
-            if (currentTabId != 0) {
-                g.setColour(juce::Colour(0xffa0a0a0));
-                g.setFont(juce::Font("Inter", 14.0f, juce::Font::plain));
-                g.drawText(TJS_L("DEV_SECTION_MSG"), contentArea.removeFromTop(30), juce::Justification::centredLeft);
-            }
         }
 
         void resized() override
@@ -207,7 +251,7 @@ public:
             searchBox.setBounds(headerArea.getX() + 40, (headerHeight - 40) / 2, 450, 40);
 
             // Content Layout
-            area.removeFromTop(140); // Titles space
+            area.removeFromTop(100); // Titles space
             auto tableArea = area.reduced(40, 0);
             
             tableHeader.setBounds(tableArea.removeFromTop(50));
@@ -217,6 +261,15 @@ public:
                 labels[i]->setBounds(i * colWidth + 24, 0, colWidth - 24, 50);
 
             viewport.setBounds(tableArea.withTrimmedBottom(40));
+
+            {
+                auto mappingArea = tableArea.withTrimmedBottom(40);
+                auto mappingTop = mappingArea.removeFromTop(36);
+                mappingSaveBtn.setBounds(mappingTop.removeFromRight(36).reduced(4));
+                mappingOpenBtn.setBounds(mappingTop.removeFromRight(36).reduced(4));
+                mappingSearchBox.setBounds(mappingTop.reduced(2));
+                mappingViewport.setBounds(mappingArea);
+            }
             layoutContent();
         }
 
@@ -341,8 +394,13 @@ public:
             // Table content visibility
             tableHeader.setVisible(id == 0);
             viewport.setVisible(id == 0 || id == 2);
+            mappingViewport.setVisible(id == 1);
+            mappingSearchBox.setVisible(id == 1);
+            mappingSaveBtn.setVisible(id == 1);
+            mappingOpenBtn.setVisible(id == 1);
 
             if (id == 0) refreshList();
+            else if (id == 1) refreshMappingList();
             else if (id == 2) refreshLanguageList();
             
             repaint();
@@ -599,6 +657,23 @@ public:
             layoutContent();
         }
 
+        void filterMappingRows()
+        {
+            juce::String filter = mappingSearchBox.getText().trim().toLowerCase();
+            for (auto& row : mappingRows)
+            {
+                bool visible = filter.isEmpty() || row->getName().toLowerCase().contains(filter);
+                row->setVisible(visible);
+            }
+            refreshMappingList();
+        }
+
+        void refreshMappingList()
+        {
+            auto w = mappingViewport.getMaximumVisibleWidth();
+            layoutMappingRows(w);
+        }
+
         void importMapping()
         {
             fileChooser = std::make_unique<juce::FileChooser>(TJS_L("FILE_CHOOSER_TITLE"), juce::File(), "*.midi.xml");
@@ -621,6 +696,107 @@ public:
             });
         }
 
+        struct MappingRowComponent : public juce::Component
+        {
+            MappingRowComponent(const juce::String& name, const juce::Image& learnIcon, const juce::String& initialValue,
+                               std::function<void(const juce::String&)> onValueChange,
+                               std::function<void()> onClear)
+            {
+                label.setText(name, juce::dontSendNotification);
+                label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+                addAndMakeVisible(label);
+
+                valueBox.setText(initialValue, juce::dontSendNotification);
+                valueBox.setEditable(true, true, true);
+                valueBox.setColour(juce::Label::textColourId, juce::Colours::cyan);
+                valueBox.setJustificationType(juce::Justification::centred);
+                valueBox.onTextChange = [this, onValueChange] { if (onValueChange) onValueChange(valueBox.getText()); };
+                addAndMakeVisible(valueBox);
+
+                learnBtn.setImages(false, true, true, learnIcon, 1.0f, {}, learnIcon, 1.0f, juce::Colours::white.withAlpha(0.3f), learnIcon, 1.0f, juce::Colours::orange.withAlpha(0.6f));
+                learnBtn.setTooltip("Learn");
+                addAndMakeVisible(learnBtn);
+
+                clearBtn.setButtonText("X");
+                clearBtn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentWhite);
+                clearBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::red.withAlpha(0.6f));
+                clearBtn.onClick = [this, onClear] { if (onClear) onClear(); };
+                addAndMakeVisible(clearBtn);
+            }
+
+            void setValue(const juce::String& v) { valueBox.setText(v, juce::dontSendNotification); }
+
+            void resized() override
+            {
+                auto area = getLocalBounds().reduced(4, 2);
+                label.setBounds(area.removeFromLeft(180));
+                clearBtn.setBounds(area.removeFromRight(28).reduced(0, 4));
+                learnBtn.setBounds(area.removeFromRight(40).reduced(0, 4));
+                valueBox.setBounds(area);
+            }
+
+            void paint(juce::Graphics& g) override
+            {
+                auto area = getLocalBounds().reduced(6, 2);
+                g.setColour(juce::Colour(0xff1a1a1a));
+                g.fillRoundedRectangle(area.toFloat(), 4.0f);
+            }
+
+        private:
+            juce::Label label;
+            juce::Label valueBox;
+            juce::ImageButton learnBtn;
+            juce::TextButton clearBtn { "X" };
+        };
+
+        void buildMappingRows(const juce::Image& learnIcon,
+                             std::map<int, juce::String>& mappingData,
+                             std::function<void(int, const juce::String&)> onUpdate)
+        {
+            mappingRows.clear();
+
+            juce::StringArray names;
+            for (int i = 0; i < 9; ++i) names.add("PAD " + juce::String(i + 1) + " PLAY");
+            for (int i = 0; i < 6; ++i) names.add(juce::StringArray{"Delay", "Echo", "Reverb", "Flange", "Space", "Dub Echo"}[i] + " ON/OFF");
+            names.add("MASTER PLAY"); names.add("MASTER STOP"); names.add("MASTER CUE"); names.add("MASTER EJECT");
+            names.add("MASTER VOLUME"); names.add("TRACK VOLUME"); names.add("GLOBAL PITCH"); names.add("PADS PITCH");
+            for (int i = 0; i < 9; ++i) names.add("PAD " + juce::String(i + 1) + " EJECT");
+            for (int i = 0; i < 9; ++i) names.add("PAD " + juce::String(i + 1) + " LOOP");
+            for (int i = 0; i < 9; ++i) names.add("PAD " + juce::String(i + 1) + " RECORD");
+
+            for (int i = 0; i < names.size(); ++i)
+            {
+                auto row = std::make_unique<MappingRowComponent>(
+                    names[i], learnIcon,
+                    mappingData.count(i) ? mappingData[i] : "---",
+                    [i, onUpdate](const juce::String& val) { if (onUpdate) onUpdate(i, val); },
+                    [i, onUpdate] { if (onUpdate) onUpdate(i, ""); }
+                );
+                mappingContent.addAndMakeVisible(row.get());
+                mappingRows.push_back(std::move(row));
+            }
+        }
+
+        void layoutMappingRows(int width)
+        {
+            int y = 0;
+            for (auto& row : mappingRows)
+            {
+                if (row->isVisible())
+                {
+                    row->setBounds(0, y, width, 36);
+                    y += 38;
+                }
+            }
+            mappingContent.setBounds(0, 0, width, std::max(y, 10));
+        }
+
+        juce::TextEditor mappingSearchBox;
+        juce::ImageButton mappingSaveBtn, mappingOpenBtn;
+        juce::Viewport mappingViewport;
+        juce::Component mappingContent;
+        std::vector<std::unique_ptr<MappingRowComponent>> mappingRows;
+
         juce::File targetFolder;
         juce::Array<juce::File> mappingFiles, filteredFiles, langFiles;
         std::function<void(const juce::File&)> onActivateCallback;
@@ -639,14 +815,16 @@ public:
 
 
     ControllerManagerWindow(const juce::File& mappingsDir, 
-                             std::function<void(const juce::File&)> onActivate)
-        : DocumentWindow("Manager",
+                             std::function<void(const juce::File&)> onActivate,
+                             std::map<int, juce::String>* mappingData = nullptr,
+                             std::function<void(int, const juce::String&)> onMappingUpdate = nullptr)
+        : DocumentWindow("Gerenciar",
                          juce::Colours::black,
                          DocumentWindow::allButtons)
     {
         setUsingNativeTitleBar(true);
         setResizable(true, true);
-        setContentOwned(new ContentComponent(mappingsDir, onActivate), true);
+        setContentOwned(new ContentComponent(mappingsDir, onActivate, mappingData, onMappingUpdate), true);
         
         // Premium default size (Increased width by 20% to ~1100)
         centreWithSize(1100, 700);
