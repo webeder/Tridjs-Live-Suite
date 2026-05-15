@@ -106,32 +106,24 @@ void AudioCore::setSmartFaderEnabled (bool enabled) {
 void AudioCore::handleSmartFader() {
     if (!smartFaderEnabled) return;
 
-    double bpmA = deckABpm;
-    double bpmB = deckBBpm;
-    if (bpmA < 20.0 || bpmB < 20.0) return;
+    double baseA = deckABpm;
+    double baseB = deckBBpm;
+    if (baseA < 20.0 || baseB < 20.0) return;
 
     float pos = crossfaderPos;
-    // Determine which deck is incoming
-    // pos < 0.5: mixing FROM deck A TO deck B → adjust B to match A
-    // pos > 0.5: mixing FROM deck B TO deck A → adjust A to match B
-    bool mixingToB = (pos < 0.5f);
-    double targetBpm = mixingToB ? bpmA : bpmB;
-    double currentBpm = mixingToB ? bpmB : bpmA;
+    // pos=0   → target = deck A BPM  (ambos a 130)
+    // pos=0.5 → target = média       (ambos a 125)
+    // pos=1   → target = deck B BPM  (ambos a 120)
+    double targetBpm = baseA + (baseB - baseA) * (double)pos;
 
-    // How far from center (0.0 = center, 1.0 = fully to one side)
-    float amount = std::abs(pos - 0.5f) * 2.0f;
+    // Ambos os decks convergem para o mesmo BPM alvo
+    double pitchA = (targetBpm / baseA - 1.0) / 0.06;
+    double pitchB = (targetBpm / baseB - 1.0) / 0.06;
 
-    // Lerp between current BPM and target BPM based on crossfader position
-    double targetRatio = targetBpm / currentBpm;
-    double blend = 1.0 + (targetRatio - 1.0) * amount;
-
-    // Convert to pitch adjustment (each 0.06 = 6% = 1 semitone approx)
-    double pitch = (blend - 1.0) / 0.06;
-
-    if (mixingToB)
-        setDeckPitch(1, pitch); // Adjust deck B
-    else
-        setDeckPitch(0, pitch); // Adjust deck A
+    // Limite estendido para Smart Fader: ±12%
+    constexpr double maxPitch = 2.0;
+    setDeckPitch(0, juce::jlimit(-maxPitch, maxPitch, pitchA));
+    setDeckPitch(1, juce::jlimit(-maxPitch, maxPitch, pitchB));
 }
 
 void AudioCore::setDeckGain(int deckIdx, float gain) {
