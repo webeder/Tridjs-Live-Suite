@@ -1,7 +1,30 @@
 #include "FxRackComponent.h"
 #include "LanguageManager.h"
 #include "SerialManager.h"
-#include "ResourceHelper.h"
+#include "BinaryData.h"
+
+namespace {
+
+static juce::Font getFaIconsFont()
+{
+    static juce::Font font(juce::Typeface::createSystemTypefaceFor(
+        BinaryData::fasolid900_ttf,
+        BinaryData::fasolid900_ttfSize));
+    return font;
+}
+
+static juce::Image createFAIcon(int glyph, int size)
+{
+    juce::Image img(juce::Image::ARGB, size, size, true);
+    juce::Graphics g(img);
+    g.setColour(juce::Colours::white);
+    g.setFont(getFaIconsFont().withHeight((float)size * 0.7f));
+    g.drawText(juce::String::charToString((juce::juce_wchar)glyph),
+               img.getBounds(), juce::Justification::centred);
+    return img;
+}
+
+}
 
 FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   // Setup Tabs
@@ -26,14 +49,26 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   toggleBtn.setColour(juce::TextButton::textColourOffId,
                       juce::Colours::lightgrey);
 
-  diskIcon =
-      juce::ImageFileFormat::loadFrom(findResourceFile("disk.png"));
-  openIcon =
-      juce::ImageFileFormat::loadFrom(findResourceFile("open.png"));
+  // ===== LEARN TAB: Save/Open MIDI Mapping buttons =====
+  {
+      auto saveImg = createFAIcon(0xf0c7, 20); // fa-floppy-disk
+      auto openImg = createFAIcon(0xf07c, 20); // fa-folder-open
+      saveMidiBtn.setImages(false, true, true, saveImg, 1.0f, {},
+                            saveImg, 1.0f, juce::Colours::white.withAlpha(0.2f),
+                            saveImg, 1.0f, juce::Colours::cyan.withAlpha(0.6f));
+      saveMidiBtn.setTooltip("Save Mapping");
+      saveMidiBtn.onClick = [this] { if (onSaveMappingRequested) onSaveMappingRequested(); };
+      midiLearnContent.addAndMakeVisible(saveMidiBtn);
+
+      openMidiBtn.setImages(false, true, true, openImg, 1.0f, {},
+                            openImg, 1.0f, juce::Colours::white.withAlpha(0.2f),
+                            openImg, 1.0f, juce::Colours::cyan.withAlpha(0.6f));
+      openMidiBtn.setTooltip("Open Mapping");
+      openMidiBtn.onClick = [this] { if (onOpenMappingRequested) onOpenMappingRequested(); };
+      midiLearnContent.addAndMakeVisible(openMidiBtn);
+  }
 
   // ===== CONFIG TAB =====
-  configIcon =
-      juce::ImageFileFormat::loadFrom(findResourceFile("config.png"));
   deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
       deviceManager, 0, 2, 2, 2, true, true, true, true);
   

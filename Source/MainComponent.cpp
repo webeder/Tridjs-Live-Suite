@@ -250,6 +250,37 @@ MainComponent::MainComponent()
       saveAllSettings();
   };
 
+  handFreeComp->fxRack.onSaveMappingRequested = [this] {
+      auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+      auto mappersDir = appDir.getChildFile("Mappers");
+      mappersDir.createDirectory();
+      fileChooser = std::make_unique<juce::FileChooser>(
+          TJS_L("FILE_CHOOSER_TITLE"), mappersDir, "*.xml");
+      fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+          [this](const juce::FileChooser& fc) {
+              auto f = fc.getResult();
+              if (f.existsAsFile() || !f.getFullPathName().isEmpty()) {
+                  auto fileName = f.getFileNameWithoutExtension();
+                  if (fileName.isEmpty()) fileName = "mapping_" + juce::Time::getCurrentTime().formatted("%Y%m%d_%H%M%S");
+                  persistence.saveMidiMapping(fileName, "Manual", midiMappings);
+              }
+          });
+  };
+
+  handFreeComp->fxRack.onOpenMappingRequested = [this] {
+      auto appDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+      auto mappersDir = appDir.getChildFile("Mappers");
+      mappersDir.createDirectory();
+      fileChooser = std::make_unique<juce::FileChooser>(
+          TJS_L("FILE_CHOOSER_TITLE"), mappersDir, "*.xml");
+      fileChooser->launchAsync(juce::FileBrowserComponent::openMode,
+          [this](const juce::FileChooser& fc) {
+              auto f = fc.getResult();
+              if (f.existsAsFile())
+                  loadMidiMappingFromFile(f);
+          });
+  };
+
   handFreeComp->fxRack.onExpandedChanged = [this](bool) { resized(); };
 
   handFreeComp->fxRack.onSaveGlobalPreset = [this](const juce::String& name) {

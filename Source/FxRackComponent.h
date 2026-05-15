@@ -356,7 +356,6 @@ public:
     std::vector<std::unique_ptr<juce::TextButton>> fxTargetBtns;
     juce::Component midiLearnContent;
     juce::ImageButton saveMidiBtn, openMidiBtn;
-    juce::Image diskIcon, openIcon;
     juce::Viewport mappingViewport;
     juce::Component mappingListContent;
     juce::TextEditor searchBox;
@@ -369,8 +368,6 @@ public:
     juce::Label inputModeLabel { {}, "" };
     juce::Label serialPortLabel { {}, "" };
     juce::Component configContent;
-    juce::ImageButton saveConfigBtn, openConfigBtn;
-    juce::Image configIcon;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
 
     struct PaletteListModel : public juce::ListBoxModel {
