@@ -2,7 +2,8 @@
 <language name="English">
     <!-- Main Tabs / Navigation -->
     <entry key="TAB_CONTROLLERS" value="Controllers"/>
-    <entry key="TAB_SETTINGS" value="Settings"/>
+    <entry key="TAB_SETTINGS" value="Mappings"/>
+    <entry key="TAB_AUDIO" value="Audio"/>
     <entry key="TAB_LANGUAGES" value="Languages"/>
     <entry key="BTN_ADD_CONTROLLER" value="Add Controller"/>
     <entry key="LINK_SUPPORT" value="Technical Support"/>
@@ -95,11 +96,11 @@
 
     <!-- Menu Bar -->
     <entry key="MENU_GENERAL" value="General"/>
-    <entry key="MENU_SETTINGS" value="Settings"/>
+    <entry key="MENU_SETTINGS" value="Mappings"/>
     <entry key="MENU_LAYOUT" value="Layout"/>
     <entry key="MENU_PLUGINS" value="Plugins"/>
     <entry key="MENU_HELP" value="Help"/>
-    <entry key="MENU_MANAGE_HARDWARE" value="Manage Hardware..."/>
+    <entry key="MENU_MANAGE_HARDWARE" value="Manage"/>
     <entry key="MENU_RELOAD_MAPPING" value="Reload Current Mapping"/>
     <entry key="MENU_DJ_HAND_FREE" value="DJ Hand Free"/>
     <entry key="MENU_DJ_MIXER" value="DJ Mixer"/>
@@ -115,7 +116,7 @@
     <entry key="DESC_NAV_RGB" value="Navigate to RGB tab"/>
     <entry key="DESC_NAV_LEARN" value="Navigate to MIDI Learn tab"/>
     <entry key="DESC_NAV_SERIAL" value="Navigate to Serial tab"/>
-    <entry key="DESC_NAV_CONFIG" value="Navigate to Settings tab"/>
+    <entry key="DESC_NAV_CONFIG" value="Navigate to Mappings tab"/>
 
     <entry key="ACTIVE_STATUS" value="Active"/>
 

@@ -2,7 +2,8 @@
 <language name="Português Brasileiro">
     <!-- Main Tabs / Navigation -->
     <entry key="TAB_CONTROLLERS" value="Controladores"/>
-    <entry key="TAB_SETTINGS" value="Configurações"/>
+    <entry key="TAB_SETTINGS" value="Mapeamentos"/>
+    <entry key="TAB_AUDIO" value="Audio"/>
     <entry key="TAB_LANGUAGES" value="Idiomas"/>
     <entry key="BTN_ADD_CONTROLLER" value="Adicionar Controlador"/>
     <entry key="LINK_SUPPORT" value="Suporte Técnico"/>
@@ -95,11 +96,11 @@
 
     <!-- Menu Bar -->
     <entry key="MENU_GENERAL" value="Geral"/>
-    <entry key="MENU_SETTINGS" value="Configurações"/>
+    <entry key="MENU_SETTINGS" value="Mapeamentos"/>
     <entry key="MENU_LAYOUT" value="Layout"/>
     <entry key="MENU_PLUGINS" value="Plugins"/>
     <entry key="MENU_HELP" value="Ajuda"/>
-    <entry key="MENU_MANAGE_HARDWARE" value="Gerenciar Hardware..."/>
+    <entry key="MENU_MANAGE_HARDWARE" value="Gerenciar"/>
     <entry key="MENU_RELOAD_MAPPING" value="Recarregar Mapeamento Atual"/>
     <entry key="MENU_DJ_HAND_FREE" value="DJ Hand Free"/>
     <entry key="MENU_DJ_MIXER" value="DJ Mixer"/>
@@ -115,7 +116,7 @@
     <entry key="DESC_NAV_RGB" value="Navegar para aba de RGB"/>
     <entry key="DESC_NAV_LEARN" value="Navegar para aba de MIDI Learn"/>
     <entry key="DESC_NAV_SERIAL" value="Navegar para aba de Serial"/>
-    <entry key="DESC_NAV_CONFIG" value="Navegar para aba de Configurações"/>
+    <entry key="DESC_NAV_CONFIG" value="Navegar para aba de Mapeamentos"/>
 
     <entry key="ACTIVE_STATUS" value="Ativo"/>
 

@@ -1079,6 +1079,7 @@ void MainComponent::showControllerManager()
         controllerManagerWindow = std::make_unique<ControllerManagerWindow>(
             persistence.getMappingsFolder(),
             [this](const juce::File& f) { loadControllerMapping(f); },
+            deviceManager,
             &midiMappings,
             [this](int row, const juce::String& id) {
                 if (id.isEmpty()) midiMappings.erase(row);
@@ -1087,6 +1088,18 @@ void MainComponent::showControllerManager()
                 handFreeComp->fxRack.updateMappingDisplay(row, id);
             }
         );
+
+        // Wire Save/Open mapping buttons in the Mapeamentos tab
+        if (auto* content = dynamic_cast<ControllerManagerWindow::ContentComponent*>(
+                controllerManagerWindow->getContentComponent()))
+        {
+            content->onSaveRequested = [this] {
+                handFreeComp->fxRack.onSaveMappingRequested();
+            };
+            content->onOpenRequested = [this] {
+                handFreeComp->fxRack.onOpenMappingRequested();
+            };
+        }
     }
     controllerManagerWindow->setVisible(true);
     controllerManagerWindow->toFront(true);

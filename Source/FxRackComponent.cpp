@@ -32,9 +32,9 @@ FxRackComponent::FxRackComponent(juce::AudioDeviceManager &deviceManager) {
   tabs.addTab(TJS_L("TAB_FX"), juce::Colours::transparentBlack, &effectsContent, false);
   tabs.addTab(TJS_L("TAB_FX_TOUCH"), juce::Colours::transparentBlack, &touchTabContent, false);
   tabs.addTab(TJS_L("TAB_RGB"), juce::Colours::transparentBlack, &rgbContent, false);
-  tabs.addTab(TJS_L("TAB_LEARN"), juce::Colours::transparentBlack, &midiLearnContent, false);
+  // tabs.addTab(TJS_L("TAB_LEARN"), ...) — movido para aba Mapeamentos
   tabs.addTab(TJS_L("TAB_SERIAL"), juce::Colours::transparentBlack, &serialContent, false);
-  tabs.addTab(TJS_L("TAB_CONFIG"), juce::Colours::transparentBlack, &configContent, false);
+  // tabs.addTab(TJS_L("TAB_CONFIG"), ...) — movido para aba Audio
 
   LanguageManager::getInstance().addChangeListener(this);
   updateLanguage();
@@ -279,9 +279,9 @@ void FxRackComponent::updateLanguage() {
   tabs.setTabName(0, "FX");
   tabs.setTabName(1, "FX TOUCH");
   tabs.setTabName(2, "RGB");
-  tabs.setTabName(3, TJS_L("TAB_LEARN"));
-  tabs.setTabName(4, "SERIAL");
-  tabs.setTabName(5, "CONFIG");
+  // tabs.setTabName(3, ...) — TAB_LEARN removida
+  tabs.setTabName(3, "SERIAL"); // era índice 4, agora é 3
+  // tabs.setTabName(5, ...) — TAB_CONFIG removida
 
   // Buttons/Labels
   saveGlobalPresetBtn.setButtonText(TJS_L("FX_SAVE_SESSION"));
